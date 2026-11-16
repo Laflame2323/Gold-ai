@@ -74,3 +74,49 @@ def gold_spot():
         )
         # Gold AI live market integration
 
+@app.post("/assistant")
+def assistant(payload: dict):
+    prompt = str(payload.get("prompt", "")).strip().lower()
+
+    if not prompt:
+        return {"response": "Please enter a message."}
+
+    if any(word in prompt for word in ["analyse", "analyze", "market", "gold price"]):
+        try:
+            market = gold_spot()
+            price = market["price"]
+            status = market.get("data_state", {}).get("status", "unknown")
+
+            return {
+                "response": (
+                    f"The latest indicative XAU/USD spot price is "
+                    f"${price:,.2f} per troy ounce. "
+                    f"Data status: {status}. "
+                    "This price alone is not enough to generate a reliable "
+                    "BUY or SELL signal. Candle data and technical analysis "
+                    "are still being developed."
+                )
+            }
+
+        except Exception:
+            return {
+                "response": "I cannot retrieve the gold price right now. Please try again."
+            }
+
+    if any(word in prompt for word in ["execute", "open trade", "buy", "sell", "close trade"]):
+        return {
+            "response": (
+                "Trade execution is not connected yet. "
+                "No trade has been placed. We still need to integrate and test MT5."
+            )
+        }
+
+    return {
+        "response": (
+            "I am your Gold AI assistant. You can ask me to analyse gold, "
+            "check its price, or explain trading concepts. "
+            "Advanced market analysis is still being developed."
+        )
+    }
+
+
