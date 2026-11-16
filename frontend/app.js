@@ -68,5 +68,49 @@ async function loadGoldPrice() {
 
 loadGoldPrice();
 setInterval(loadGoldPrice, 60000);
+const sendPrompt = document.getElementById("sendPrompt");
+const userPrompt = document.getElementById("userPrompt");
+const chatMessages = document.getElementById("chatMessages");
+
+sendPrompt.addEventListener("click", async function () {
+    const prompt = userPrompt.value.trim();
+
+    if (!prompt) return;
+
+    const userMessage = document.createElement("p");
+    userMessage.textContent = "You: " + prompt;
+    chatMessages.appendChild(userMessage);
+
+    userPrompt.value = "";
+
+    const aiMessage = document.createElement("p");
+    aiMessage.textContent = "Gold AI: Analysing your request...";
+    chatMessages.appendChild(aiMessage);
+
+    sendPrompt.disabled = true;
+
+    try {
+        const response = await fetch(`${API_URL}/assistant`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ prompt: prompt })
+        });
+
+        if (!response.ok) {
+            throw new Error("Assistant request failed");
+        }
+
+        const data = await response.json();
+        aiMessage.textContent = "Gold AI: " + data.response;
+
+    } catch (error) {
+        aiMessage.textContent =
+            "Gold AI: Unable to process your request right now.";
+    }
+
+    sendPrompt.disabled = false;
+});
 
 
