@@ -72,4 +72,5 @@ def gold_spot():
             status_code=502,
             detail="Could not retrieve Gold market data"
         )
+        # Gold AI live market integration
 
