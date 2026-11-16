@@ -39,3 +39,34 @@ analyzeBtn.addEventListener("click", async function () {
     analyzeBtn.disabled = false;
 });
 
+const goldPrice = document.getElementById("goldPrice");
+const priceUpdated = document.getElementById("priceUpdated");
+
+async function loadGoldPrice() {
+    try {
+        const response = await fetch(`${API_URL}/market/spot`);
+
+        if (!response.ok) {
+            throw new Error("Price unavailable");
+        }
+
+        const data = await response.json();
+
+        goldPrice.textContent = "$" + Number(data.price).toLocaleString(
+            "en-US",
+            { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        );
+
+        priceUpdated.textContent =
+            "Last updated: " + new Date(data.price_as_of).toLocaleTimeString();
+
+    } catch (error) {
+        goldPrice.textContent = "Unavailable";
+        priceUpdated.textContent = "Could not load gold price.";
+    }
+}
+
+loadGoldPrice();
+setInterval(loadGoldPrice, 60000);
+
+
