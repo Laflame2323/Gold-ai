@@ -1,6 +1,11 @@
 name: Gold AI market data collector
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/market-collector.yml"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
