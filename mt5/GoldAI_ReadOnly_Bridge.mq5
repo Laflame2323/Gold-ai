@@ -3,7 +3,7 @@
 // Add https://gold-ai-backend-p9el.onrender.com to MT5 WebRequest allowed URLs.
 
 #property strict
-#property version   "1.00"
+#property version   "1.10"
 #property description "Gold AI read-only candle uploader"
 
 input string IngestURL = "https://gold-ai-backend-p9el.onrender.com/broker/mt5/candles";
