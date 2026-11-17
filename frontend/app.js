@@ -322,6 +322,25 @@ function updateMonitorState() {
 }
 
 
+
+function renderCotHistory(history) {
+  const container = $("cotHistory");
+  if (!container) return;
+  container.replaceChildren();
+  const points = history.slice(-13);
+  if (!points.length) return;
+  const maxAbs = Math.max(1, ...points.map((item) => Math.abs(Number(item.managed_money_net) || 0)));
+  points.forEach((point) => {
+    const net = Number(point.managed_money_net) || 0;
+    const bar = document.createElement("span");
+    bar.className = "cot-history-bar " + (net >= 0 ? "positive" : "negative");
+    bar.style.height = Math.max(4, Math.round(Math.abs(net) / maxAbs * 42)) + "px";
+    bar.title = point.report_date + " · " + net.toLocaleString("en-US") + " net contracts";
+    bar.setAttribute("aria-label", bar.title);
+    container.appendChild(bar);
+  });
+}
+
 async function loadCotPositioning() {
   const status = $("cotStatus");
   try {
@@ -339,6 +358,15 @@ async function loadCotPositioning() {
       ? "—" : Number(latest.managed_money_net_pct_oi).toFixed(1) + "%";
     $("cotPercentile").textContent = latest.managed_money_net_percentile_3y == null
       ? "—" : Number(latest.managed_money_net_percentile_3y).toFixed(1) + "%";
+    const setGroupNet = (id, value) => {
+      const element = $(id);
+      element.textContent = value == null ? "—" : (value > 0 ? "+" : "") + fmt(value);
+      element.className = value > 0 ? "positive" : value < 0 ? "negative" : "";
+    };
+    setGroupNet("cotProducerNet", latest.producer_merchant_net);
+    setGroupNet("cotSwapNet", latest.swap_dealer_net);
+    setGroupNet("cotOtherNet", latest.other_reportable_net);
+    renderCotHistory(data.history || []);
     const change = Number(latest.managed_money_net_change);
     $("cotChange").className = change > 0 ? "positive" : change < 0 ? "negative" : "";
     status.textContent = "OFFICIAL WEEKLY DATA";
