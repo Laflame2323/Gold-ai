@@ -33,7 +33,7 @@ def normalise_cot_rows(raw_rows):
         "open_interest": "open_interest_all",
         "managed_money_long": "m_money_positions_long_all",
         "managed_money_short": "m_money_positions_short_all",
-        "managed_money_spread": "m_money_positions_spread_all",
+        "managed_money_spread": "m_money_positions_spread",
         "producer_merchant_long": "prod_merc_positions_long",
         "producer_merchant_short": "prod_merc_positions_short",
         "swap_dealer_long": "swap_positions_long_all",
@@ -92,7 +92,7 @@ def get_gold_cot(force_refresh=False):
             return _cache["payload"]
     select = ",".join([
         "report_date_as_yyyy_mm_dd", "market_and_exchange_names", "open_interest_all",
-        "m_money_positions_long_all", "m_money_positions_short_all", "m_money_positions_spread_all",
+        "m_money_positions_long_all", "m_money_positions_short_all", "m_money_positions_spread",
         "prod_merc_positions_long", "prod_merc_positions_short", "swap_positions_long_all",
         "swap__positions_short_all", "other_rept_positions_long", "other_rept_positions_short",
     ])
