@@ -147,6 +147,54 @@ def analyse():
     }
 
 
+@app.get("/research/backtest")
+def research_backtest(timeframe: str = "H1", horizon: int = 5):
+    """Run a historical directional test on one consistent gold candle source."""
+    from research_backtest import run_directional_backtest
+
+    selected_timeframe = timeframe.upper()
+    supported = {"M1", "M5", "M15", "M30", "H1", "H4"}
+    if selected_timeframe not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported timeframe. Use M1, M5, M15, M30, H1 or H4.",
+        )
+    if horizon < 1 or horizon > 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
+
+    try:
+        mt5_source = get_latest_mt5_source()
+        if mt5_source:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], selected_timeframe
+            )
+            source_label = "Authenticated MT5 broker archive (read-only)"
+            symbol = mt5_source["symbol"]
+            broker_source = mt5_source["source"]
+        else:
+            market = get_market_candles(selected_timeframe)
+            source_label = "XAUS reference-market archive (not broker execution prices)"
+            symbol = market.get("symbol", "XAUUSD")
+            broker_source = None
+
+        result = run_directional_backtest(market.get("candles") or [], horizon=horizon)
+        return {
+            **result,
+            "symbol": symbol,
+            "timeframe": selected_timeframe,
+            "data_source": source_label,
+            "broker_source": broker_source,
+            "read_only": True,
+            "execution_enabled": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.get("/research/cot")
 def gold_cot():
     """Return delayed official CFTC gold positioning and archive its weekly history."""
