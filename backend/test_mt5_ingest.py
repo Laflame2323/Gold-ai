@@ -13,6 +13,7 @@ class MT5IngestionTests(unittest.TestCase):
             "broker_server": "Broker-MT5Live01",
             "symbol": "XAUUSDm",
             "timeframe": "M5",
+            "server_utc_offset_seconds": 7200,
             "candles": [{
                 "time": 1767225300,
                 "open": 4300.0, "high": 4302.0,
@@ -25,6 +26,7 @@ class MT5IngestionTests(unittest.TestCase):
         self.assertEqual(rows[0]["quality_status"], "verified")
         self.assertTrue(rows[0]["is_closed"])
         self.assertEqual(rows[0]["raw_metadata"]["spread_points"], 25)
+        self.assertEqual(rows[0]["raw_metadata"]["server_utc_offset_seconds"], 7200)
 
     def test_invalid_ohlc_is_rejected(self):
         with self.assertRaises(ValidationError):
