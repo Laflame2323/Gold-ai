@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from market_data import MarketDataError, _aggregate_h4, _normalise_candles, _fetch_json_with_retries
+from market_data import MarketDataError, _aggregate_h4, _normalise_candles, _fetch_json_with_retries, _fetch_provider_candles
 
 
 class MarketDataTests(unittest.TestCase):
@@ -27,6 +27,26 @@ class MarketDataTests(unittest.TestCase):
                 with self.assertRaises(MarketDataError):
                     _fetch_json_with_retries(object(), "provider unavailable", attempts=3)
         self.assertEqual(fetch.call_count, 3)
+
+    def test_chart_candle_fetch_uses_retry_helper(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return b'{"points":[{"t":1794891600,"o":4000,"h":4002,"l":3998,"c":4001}]}'
+
+        with patch("market_data._cache", {}):
+            with patch("market_data._fetch_json_with_retries", return_value={
+                "points": [{"t": 1794891600, "o": 4000, "h": 4002, "l": 3998, "c": 4001}]
+            }) as retry_fetch:
+                result = _fetch_provider_candles("1m", "1d")
+        self.assertEqual(len(result["candles"]), 1)
+        self.assertEqual(result["candles"][0]["close"], 4001.0)
+        retry_fetch.assert_called_once()
+        self.assertEqual(retry_fetch.call_args.kwargs["attempts"], 3)
+        self.assertEqual(retry_fetch.call_args.kwargs["timeout"], 20)
 
     def test_normalise_sorts_and_deduplicates(self):
         rows = [
