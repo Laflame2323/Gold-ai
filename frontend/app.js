@@ -198,11 +198,20 @@ async function analyseGold() {
     $("signal").className = "signal-value " + (
       signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "wait"
     );
-    $("message").textContent = data.message || "No analysis message was returned.";
-    $("signalState").textContent = data.ai_trained ? "MODEL ACTIVE" : "VALIDATION";
+    const researchSignal = String(data.research_signal || "WAIT").toUpperCase();
+    const technicalBias = String(data.technical_bias || "NEUTRAL").toUpperCase();
+    const alignment = Number(data.alignment_score);
+    const alignmentText = Number.isFinite(alignment)
+      ? " Alignment score: " + alignment.toFixed(3) + "."
+      : "";
+    $("message").textContent =
+      (data.message || "No analysis message was returned.") +
+      " Research-only bias: " + technicalBias +
+      " (" + researchSignal + ")." + alignmentText;
+    $("signalState").textContent = data.execution_ready ? "BROKER VERIFIED" : "RESEARCH ONLY";
     $("modelStatus").textContent = data.ai_trained
       ? "Model status reported as trained. Always review the data and risk before trading."
-      : "The AI model is not trained yet. This WAIT result is not a live BUY or SELL recommendation.";
+      : "This is indicator-based research, not a trained AI model or live trade recommendation.";
     $("entryValue").textContent = data.entry ?? "—";
     $("stopValue").textContent = data.stop_loss ?? "—";
     $("targetValue").textContent = data.take_profit ?? "—";
