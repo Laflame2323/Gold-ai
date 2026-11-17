@@ -16,8 +16,9 @@ The `GoldAI_ReadOnly_Bridge.mq5` Expert Advisor sends **completed XAUUSD candles
 ## What it sends
 
 - Six completed timeframes: M1, M5, M15, M30, H1 and H4.
-- Up to 300 historical closed bars per timeframe (default 100) when first connected.
-- A refreshed lookback when a new completed bar appears, so recent missed bars can be backfilled.
+- Up to 5,000 historical closed bars per timeframe (default 5,000) on first connection, archived in safe 500-row database batches.
+- After the initial history upload, only the latest 100 completed bars are refreshed when a new bar appears, keeping the archive current without repeatedly uploading the full history.
+- One timeframe is processed per timer tick to avoid blocking MT5 with six large requests at once.
 - Broker server label, broker symbol, OHLC, tick volume, real volume, and spread points.
 - Broker-server timestamps converted to UTC using the current server/GMT offset. The offset used is recorded with each batch.
 
