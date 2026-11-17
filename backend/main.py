@@ -188,6 +188,25 @@ def ingest_mt5_candles(
     }
 
 
+@app.get("/broker/mt5/status")
+def mt5_status():
+    """Expose safe connection status without revealing the ingestion secret."""
+    configured = bool(os.getenv("MT5_INGEST_TOKEN"))
+    try:
+        source = get_latest_mt5_source()
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return {
+        "ingestion_configured": configured,
+        "ingestion_locked": not configured,
+        "broker_feed_available": bool(source),
+        "symbol": source.get("symbol") if source else None,
+        "last_received_at": source.get("fetched_at") if source else None,
+        "read_only": True,
+        "execution_enabled": False,
+    }
+
+
 @app.get("/research/macro")
 def macro_context():
     """Return public FRED macro context and archive its daily observations."""
