@@ -38,10 +38,10 @@ def record_collector_run(started_at: datetime, archive_results: dict, provider_e
         "finished_at": finished_at.isoformat(),
         "status": "success" if len(saved) == 6 and not failed else ("partial" if saved else "failed"),
         "rows_received": rows_received,
-        "rows_inserted": None,
+        "rows_inserted": rows_received,
         "timeframes": sorted(saved),
         "error_message": json.dumps(failed, separators=(",", ":")) if failed else None,
-        "metadata": {"saved_timeframes": sorted(saved), "failed_timeframes": failed, "provider_errors": provider_errors},
+        "metadata": {"saved_timeframes": sorted(saved), "failed_timeframes": failed, "provider_errors": provider_errors, "rows_inserted_field_is_rows_submitted": True},
     }
     request = Request(
         f"{base_url}/rest/v1/collector_runs",
