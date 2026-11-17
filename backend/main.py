@@ -57,14 +57,12 @@ def analyse():
     archive_results = {}
     provider_errors = {}
     mt5_source = None
-    mt5_archive_error = False
 
     # Prefer one broker's own feed when it is present. Never mix MT5 and XAUS
     # candles in the same analysis.
     try:
         mt5_source = get_latest_mt5_source()
     except MarketStorageError as exc:
-        mt5_archive_error = True
         provider_errors["MT5 archive"] = str(exc)[:300]
 
     if mt5_source:
@@ -87,7 +85,6 @@ def analyse():
                 for timeframe in selected_timeframes
             }
             for job in as_completed(jobs):
-                timeframe = job[job] if False else None
                 timeframe = jobs[job]
                 try:
                     market_data[timeframe] = job.result()
