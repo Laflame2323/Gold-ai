@@ -92,8 +92,8 @@ def analyse():
         "execution_ready": False,
         "research_only": True,
         "data_source": "XAUS reference-market feed",
-        "message": message,
-        **analysis
+        **analysis,
+        "message": message
     }
 
 
