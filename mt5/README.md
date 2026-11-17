@@ -17,8 +17,9 @@ This optional MetaTrader 5 Expert Advisor sends **completed XAUUSD candles only*
 - Up to 500 historical closed bars per timeframe on first connection.
 - Subsequent newly completed bars, including any bars missed while the terminal was offline.
 - Broker server label, broker symbol, OHLC, tick volume, real volume, and spread points.
+- Bar timestamps are converted from the broker server clock to UTC using the current server/GMT offset. The offset used is recorded with each batch.
 
-The backend validates the token, symbol, timeframe, OHLC values, and candle completion time before archiving. Broker candles are stored under a separate source label from the XAUS reference feed.
+The backend validates the token, symbol, timeframe, OHLC values, and candle completion time before archiving. Broker candles are stored under a separate source label from the XAUS reference feed. MT5 does not provide a historical table of broker UTC-offset changes, so old bars that cross a broker daylight-saving transition may need a one-hour timestamp correction before being used in cross-source research. The feed records this limitation in its metadata.
 
 ## Important
 
