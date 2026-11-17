@@ -6,6 +6,7 @@ from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, get_market_candles
+from market_storage import archive_market_candles
 import json
 
 
@@ -46,6 +47,7 @@ def health():
 def analyse():
     selected_timeframes = ["M1", "M5", "M15", "M30", "H1", "H4"]
     market_data = {}
+    archive_results = {}
     provider_errors = {}
 
     # Fetch all timeframes concurrently so one slow request does not delay
@@ -59,6 +61,7 @@ def analyse():
             timeframe = jobs[job]
             try:
                 market_data[timeframe] = job.result()
+                archive_results[timeframe] = archive_market_candles(market_data[timeframe])
             except Exception as exc:
                 provider_errors[timeframe] = str(exc)
 
@@ -92,6 +95,7 @@ def analyse():
         "execution_ready": False,
         "research_only": True,
         "data_source": "XAUS reference-market feed",
+        "archive_status": archive_results,
         **analysis,
         "message": message
     }
@@ -143,7 +147,9 @@ def market_candles(timeframe: str = "M15"):
         )
 
     try:
-        return get_market_candles(selected_timeframe)
+        market = get_market_candles(selected_timeframe)
+        market["archive"] = archive_market_candles(market)
+        return market
     except MarketDataError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
