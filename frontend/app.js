@@ -321,6 +321,34 @@ function updateMonitorState() {
   state.innerHTML = "<i></i>" + (spotOk && candleOk ? "FEEDS HEALTHY" : spotOk ? "CHECK FEED" : "CONNECTING / OFFLINE");
 }
 
+
+async function loadCotPositioning() {
+  const status = $("cotStatus");
+  try {
+    const response = await fetch(API_URL + "/research/cot", { cache: "no-store" });
+    if (!response.ok) throw new Error("CFTC endpoint returned " + response.status);
+    const data = await response.json();
+    const latest = data.latest || {};
+    const fmt = (value) => Number(value).toLocaleString("en-US");
+    $("cotNet").textContent = latest.managed_money_net == null ? "—" : fmt(latest.managed_money_net);
+    $("cotChange").textContent = latest.managed_money_net_change == null
+      ? "First observation"
+      : (latest.managed_money_net_change > 0 ? "+" : "") + fmt(latest.managed_money_net_change);
+    $("cotReportDate").textContent = latest.report_date || "—";
+    $("cotNetOi").textContent = latest.managed_money_net_pct_oi == null
+      ? "—" : Number(latest.managed_money_net_pct_oi).toFixed(1) + "%";
+    $("cotPercentile").textContent = latest.managed_money_net_percentile_3y == null
+      ? "—" : Number(latest.managed_money_net_percentile_3y).toFixed(1) + "%";
+    const change = Number(latest.managed_money_net_change);
+    $("cotChange").className = change > 0 ? "positive" : change < 0 ? "negative" : "";
+    status.textContent = "OFFICIAL WEEKLY DATA";
+    $("cotNote").textContent = data.data_note || "Weekly CFTC positioning is delayed context, not live order flow or a trade signal.";
+  } catch (error) {
+    status.textContent = "DATA UNAVAILABLE";
+    $("cotNote").textContent = "CFTC positioning could not be loaded. Gold AI will not estimate or invent positioning data.";
+  }
+}
+
 async function analyseGold() {
   const button = $("analyzeBtn");
   button.disabled = true;
@@ -432,6 +460,7 @@ $("chatForm").addEventListener("submit", sendAssistantMessage);
 
 loadGoldPrice();
 loadCandles("M15");
+loadCotPositioning();
 refreshAllTimeframeMonitor();
 setInterval(loadGoldPrice, 15000);
 setInterval(() => loadCandles(selectedTimeframe), 60000);
