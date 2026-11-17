@@ -30,6 +30,8 @@ def archive_market_candles(market_data: dict) -> dict:
     symbol = market_data.get("symbol", "XAUUSD")
     source = market_data.get("provider_source") or "XAUS chart API"
     fetched_at = datetime.now(timezone.utc).isoformat()
+    data_status = market_data.get("data_status")
+    quality_status = "stale" if data_status == "stale" else "unverified"
     metadata = {
         "data_status": market_data.get("data_status"),
         "age_seconds": market_data.get("age_seconds"),
@@ -58,7 +60,7 @@ def archive_market_candles(market_data: dict) -> dict:
                 "source": source,
                 "fetched_at": fetched_at,
                 "is_closed": True,
-                "quality_status": "unverified",
+                "quality_status": quality_status,
                 "raw_metadata": metadata,
             })
         except (KeyError, TypeError, ValueError, OverflowError):
