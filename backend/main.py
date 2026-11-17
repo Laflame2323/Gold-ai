@@ -3,10 +3,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from urllib.request import urlopen
-from urllib.error import URLError, HTTPError
+from urllib.request import Request
 from analysis_engine import analyse_timeframes
-from market_data import MarketDataError, get_market_candles, get_daily_history, get_intraday_prices
+from market_data import MarketDataError, _fetch_json_with_retries, get_market_candles, get_daily_history, get_intraday_prices
 from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run
 from cot_data import COTDataError, get_gold_cot
 from macro_data import MacroDataError, get_macro_context
@@ -181,17 +180,23 @@ def macro_context():
 
 @app.get("/market/spot")
 def gold_spot():
-    url = "https://xaus.com/api/v1/spot?compact=1"
+    request = Request(
+        "https://xaus.com/api/v1/spot?compact=1",
+        headers={"Accept": "application/json", "User-Agent": "GoldAI/1.0"},
+    )
     try:
-        with urlopen(url, timeout=15) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        data = _fetch_json_with_retries(
+            request,
+            "Could not retrieve Gold market data after retrying transient failures.",
+            attempts=3,
+            timeout=15,
+        )
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=502, detail="Gold price response was invalid.")
 
         price = data.get("spot_usd_oz")
         if price is None:
-            raise HTTPException(
-                status_code=502,
-                detail="Gold price unavailable"
-            )
+            raise HTTPException(status_code=502, detail="Gold price unavailable")
 
         return {
             "symbol": "XAUUSD",
@@ -203,14 +208,10 @@ def gold_spot():
             "data_state": data.get("data_state"),
             "source": "XAUS"
         }
-
     except HTTPException:
         raise
-    except (URLError, HTTPError, TimeoutError, ValueError):
-        raise HTTPException(
-            status_code=502,
-            detail="Could not retrieve Gold market data"
-        )
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.get("/market/candles")
