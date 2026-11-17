@@ -113,6 +113,19 @@ class MT5IngestionTests(unittest.TestCase):
                 "candles": [{"time": 1767225540, "open": 1, "high": 2, "low": 1, "close": 2}]
             })
 
+    def test_large_history_batch_is_accepted(self):
+        candles = [
+            {"time": 1767000000 + i * 60, "open": 4300, "high": 4302,
+             "low": 4298, "close": 4301}
+            for i in range(1200)
+        ]
+        batch = MT5Batch.model_validate({
+            "broker_server": "Broker-MT5", "symbol": "XAUUSDm",
+            "timeframe": "M1", "server_utc_offset_seconds": 0,
+            "candles": candles,
+        })
+        self.assertEqual(len(batch.candles), 1200)
+
 
 if __name__ == "__main__":
     unittest.main()
