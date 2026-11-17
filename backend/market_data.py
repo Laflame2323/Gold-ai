@@ -90,7 +90,7 @@ def _normalise_candles(raw_points):
                 "volume": point.get("v", point.get("volume")),
             }
             values = [candle[k] for k in ("open", "high", "low", "close")]
-            if not all(math.isfinite(value) for value in values):
+            if not all(math.isfinite(value) and value > 0 for value in values):
                 continue
             if candle["high"] < max(candle["open"], candle["close"], candle["low"]):
                 continue
