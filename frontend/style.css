@@ -256,3 +256,21 @@ a { color: inherit; text-decoration: none; }
 .regime-alignments strong { color:#dce4ef; font-family:var(--mono); font-size:10px; overflow-wrap:anywhere; }
 .regime-risk { margin:12px 0 0; color:#d3b779; font-size:10px; line-height:1.6; }
 @media (max-width:520px) { .regime-alignments { gap:6px; } .regime-alignments strong { font-size:9px; } .regime-main strong { font-size:19px; } }
+
+
+/* Official CFTC gold positioning panel */
+.cot-panel{margin-top:17px;padding:19px}
+.cot-main{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;margin-top:17px}
+.cot-main>div{display:flex;flex-direction:column;gap:7px;padding:13px;border:1px solid #28364b;border-radius:8px;background:#0e1725;min-width:0}
+.cot-main span,.cot-stats span{color:#8290a5;font:8px var(--mono);letter-spacing:.55px}
+.cot-main strong{color:#e8edf5;font:500 22px var(--mono);overflow-wrap:anywhere}
+.cot-main small{color:#8290a5;font-size:9px}
+.cot-change strong{font-size:17px}
+.cot-change strong.positive{color:var(--green)}
+.cot-change strong.negative{color:var(--red)}
+.cot-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:11px}
+.cot-stats div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cot-stats strong{color:#dce4ef;font:10px var(--mono);overflow-wrap:anywhere}
+.cot-note{margin:13px 0 0;color:#a38a5b;font-size:9px;line-height:1.6}
+.cot-attribution{margin-top:10px;color:#65758c;font:7px var(--mono);letter-spacing:.35px;line-height:1.5}
+@media(max-width:520px){.cot-panel{padding:15px}.cot-main{grid-template-columns:1fr 1fr}.cot-main strong{font-size:17px}.cot-stats{gap:7px}.cot-stats strong{font-size:9px}}
