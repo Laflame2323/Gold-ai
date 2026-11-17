@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import market_storage
@@ -42,6 +43,49 @@ class MarketStorageTests(unittest.TestCase):
         self.assertEqual(second["rows_sent"], 0)
         self.assertTrue(second["deduplicated"])
         self.assertEqual(fetch.call_count, 1)
+
+    @patch("market_storage._read_supabase_rows")
+    def test_latest_mt5_source_is_selected_from_private_archive(self, read_rows):
+        read_rows.return_value = [{
+            "symbol": "XAUUSDm",
+            "source": "MT5:Broker MT5 Demo",
+            "fetched_at": "2026-11-17T15:00:00+00:00",
+        }]
+
+        result = market_storage.get_latest_mt5_source()
+
+        self.assertEqual(result["symbol"], "XAUUSDm")
+        self.assertEqual(result["source"], "MT5:Broker MT5 Demo")
+        self.assertIn("source=like.MT5", read_rows.call_args.args[0])
+
+    @patch("market_storage._read_supabase_rows")
+    def test_mt5_candles_are_sorted_and_freshness_checked(self, read_rows):
+        read_rows.return_value = [
+            {
+                "candle_time": "2026-11-17T15:04:00+00:00",
+                "open": 4001, "high": 4003, "low": 4000, "close": 4002,
+                "volume": 15, "quality_status": "verified", "is_closed": True,
+            },
+            {
+                "candle_time": "2026-11-17T15:03:00+00:00",
+                "open": 4000, "high": 4002, "low": 3999, "close": 4001,
+                "volume": 12, "quality_status": "verified", "is_closed": True,
+            },
+        ]
+
+        result = market_storage.get_mt5_market_candles(
+            "XAUUSDm",
+            "MT5:Broker MT5 Demo",
+            "M1",
+            now=datetime(2026, 11, 17, 15, 5, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(result["count"], 2)
+        self.assertEqual([candle["time"] for candle in result["candles"]], sorted(
+            candle["time"] for candle in result["candles"]
+        ))
+        self.assertEqual(result["data_status"], "recent")
+        self.assertEqual(result["source"], "authenticated MT5 broker feed")
 
     @patch("market_storage.urlopen", return_value=FakeResponse())
     @patch("market_storage._supabase_credentials", return_value=("https://example.supabase.co", "service-key"))
