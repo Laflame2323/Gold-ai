@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from analysis_engine import analyse_timeframes
-from market_data import MarketDataError, get_market_candles
-from market_storage import archive_market_candles, record_collector_run
+from market_data import MarketDataError, get_market_candles, get_daily_history, get_intraday_prices
+from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, record_collector_run
 import json
 
 
@@ -67,6 +67,19 @@ def analyse():
             except Exception as exc:
                 provider_errors[timeframe] = str(exc)[:300]
 
+    history_archive = {}
+    try:
+        daily_history = get_daily_history()
+        history_archive["daily"] = archive_daily_history(daily_history)
+    except Exception as exc:
+        history_archive["daily"] = {"status": "error", "message": str(exc)[:250]}
+
+    try:
+        intraday_history = get_intraday_prices(hours=48)
+        history_archive["intraday"] = archive_intraday_prices(intraday_history)
+    except Exception as exc:
+        history_archive["intraday"] = {"status": "error", "message": str(exc)[:250]}
+
     analysis = analyse_timeframes(market_data)
     if provider_errors:
         error_summary = "; ".join(
@@ -101,6 +114,7 @@ def analyse():
         "research_only": True,
         "data_source": "XAUS reference-market feed",
         "archive_status": archive_results,
+        "history_archive": history_archive,
         "collector_audit": collector_audit,
         **analysis,
         "message": message
