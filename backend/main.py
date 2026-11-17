@@ -3,12 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
+from market_data import MarketDataError, get_market_candles
 import json
+
+
 app = FastAPI(
     title="Gold AI",
     description="Gold Trading Analysis API",
-    version="1.2.0"
+    version="1.3.0"
 )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,8 +20,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 class AssistantRequest(BaseModel):
     prompt: str
+
+
 @app.get("/")
 def home():
     return {
@@ -25,29 +33,37 @@ def home():
         "name": "Gold AI",
         "message": "Gold AI backend is running"
     }
+
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
 @app.get("/analyse")
 def analyse():
     return {
         "symbol": "XAUUSD",
         "signal": "WAIT",
-        "message": "Waiting for reliable market data and technical analysis.",
+        "message": "Candle-data connection is being validated before technical signals are enabled.",
         "ai_trained": False
     }
+
+
 @app.get("/market/spot")
 def gold_spot():
     url = "https://xaus.com/api/v1/spot?compact=1"
     try:
         with urlopen(url, timeout=15) as response:
             data = json.loads(response.read().decode("utf-8"))
+
         price = data.get("spot_usd_oz")
         if price is None:
             raise HTTPException(
                 status_code=502,
                 detail="Gold price unavailable"
             )
+
         return {
             "symbol": "XAUUSD",
             "price": price,
@@ -58,6 +74,7 @@ def gold_spot():
             "data_state": data.get("data_state"),
             "source": "XAUS"
         }
+
     except HTTPException:
         raise
     except (URLError, HTTPError, TimeoutError, ValueError):
@@ -65,11 +82,32 @@ def gold_spot():
             status_code=502,
             detail="Could not retrieve Gold market data"
         )
+
+
+@app.get("/market/candles")
+def market_candles(timeframe: str = "M15"):
+    selected_timeframe = timeframe.upper()
+    supported = {"M1", "M5", "M15", "M30", "H1", "H4"}
+
+    if selected_timeframe not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported timeframe. Use M1, M5, M15, M30, H1 or H4."
+        )
+
+    try:
+        return get_market_candles(selected_timeframe)
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.post("/assistant")
 def assistant(payload: AssistantRequest):
     prompt = payload.prompt.strip().lower()
+
     if not prompt:
         return {"response": "Please enter a message."}
+
     if any(word in prompt for word in [
         "execute",
         "open trade",
@@ -85,6 +123,7 @@ def assistant(payload: AssistantRequest):
                 "MT5 integration and testing are still required."
             )
         }
+
     if any(word in prompt for word in [
         "analyse",
         "analyze",
@@ -97,6 +136,7 @@ def assistant(payload: AssistantRequest):
             price = float(market["price"])
             data_state = market.get("data_state") or {}
             status = data_state.get("status", "unknown")
+
             return {
                 "response": (
                     f"The latest indicative XAU/USD spot price is "
@@ -107,6 +147,7 @@ def assistant(payload: AssistantRequest):
                     "technical analysis are still needed."
                 )
             }
+
         except Exception:
             return {
                 "response": (
@@ -114,6 +155,7 @@ def assistant(payload: AssistantRequest):
                     "Please try again later."
                 )
             }
+
     return {
         "response": (
             "Hello! I am Gold AI. You can ask me to analyse gold, "
@@ -121,13 +163,13 @@ def assistant(payload: AssistantRequest):
             "Advanced AI analysis and MT5 integration are still being developed."
         )
     }
+
+
 @app.get("/debug/build")
 def debug_build():
     return {
-        "build": "GOLD-AI-DEBUG-130",
+        "build": "GOLD-AI-CANDLES-140",
         "version": app.version,
         "file": __file__,
         "routes": [route.path for route in app.routes]
     }
-
-
