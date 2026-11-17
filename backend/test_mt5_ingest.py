@@ -4,7 +4,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from datetime import datetime, timezone
 from pydantic import ValidationError
-from mt5_ingest import MT5Batch, normalise_mt5_batch
+from mt5_ingest import MT5Batch, normalise_mt5_batch, archive_mt5_batch
 from main import ingest_mt5_candles
 
 
@@ -125,6 +125,26 @@ class MT5IngestionTests(unittest.TestCase):
             "candles": candles,
         })
         self.assertEqual(len(batch.candles), 1200)
+
+    def test_large_history_archive_is_split_into_500_row_writes(self):
+        candles = [
+            {"time": 1767000000 + i * 60, "open": 4300, "high": 4302,
+             "low": 4298, "close": 4301}
+            for i in range(1100)
+        ]
+        batch = MT5Batch.model_validate({
+            "broker_server": "Broker-MT5", "symbol": "XAUUSDm",
+            "timeframe": "M1", "server_utc_offset_seconds": 0,
+            "candles": candles,
+        })
+        with patch("mt5_ingest._archive_reference_rows",
+                   side_effect=lambda table, rows, conflict: {
+                       "status": "saved", "rows_sent": len(rows)
+                   }) as archive:
+            result = archive_mt5_batch(batch)
+        self.assertEqual(result["status"], "saved")
+        self.assertEqual(result["rows_sent"], 1100)
+        self.assertEqual([len(call.args[1]) for call in archive.call_args_list], [500, 500, 100])
 
 
 if __name__ == "__main__":
