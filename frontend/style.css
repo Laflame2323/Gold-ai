@@ -242,3 +242,17 @@ a { color: inherit; text-decoration: none; }
 .market-alert time{color:#77869d;font:8px var(--mono);white-space:nowrap}
 .alert-disclaimer{margin:11px 0 0;color:#77869d;font-size:8px;line-height:1.5}
 @media(max-width:760px){.alerts-panel{margin-top:13px;padding:15px}.market-alert{align-items:flex-start}.market-alert time{padding-top:2px}}
+
+
+/* Market regime intelligence */
+.regime-panel { margin-top:17px; padding:19px; }
+.regime-main { display:flex; align-items:baseline; gap:12px; margin:18px 0 7px; }
+.regime-main strong { color:var(--gold-light); font-family:var(--mono); font-size:23px; }
+.regime-main span { color:#aebbd0; font-family:var(--mono); font-size:10px; }
+.regime-explanation { margin:0; color:#9aa8ba; font-size:11px; line-height:1.6; }
+.regime-alignments { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:16px; padding:13px 0; border-top:1px solid #273449; border-bottom:1px solid #273449; }
+.regime-alignments div { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.regime-alignments span { color:#7f8da2; font-family:var(--mono); font-size:8px; }
+.regime-alignments strong { color:#dce4ef; font-family:var(--mono); font-size:10px; overflow-wrap:anywhere; }
+.regime-risk { margin:12px 0 0; color:#d3b779; font-size:10px; line-height:1.6; }
+@media (max-width:520px) { .regime-alignments { gap:6px; } .regime-alignments strong { font-size:9px; } .regime-main strong { font-size:19px; } }
