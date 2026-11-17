@@ -253,3 +253,28 @@ def archive_gold_cot(cot_payload: dict) -> dict:
     return _archive_reference_rows(
         "cot_gold_positions", rows, "contract_code,report_date,source"
     )
+
+
+def archive_macro_context(payload: dict) -> dict:
+    """Upsert daily public macro observations without filling missing dates."""
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for series_id, observations in (payload.get("history") or {}).items():
+        for item in observations:
+            try:
+                rows.append({
+                    "series_id": series_id,
+                    "observation_date": item["observation_date"],
+                    "value": item["value"],
+                    "source": "Federal Reserve Bank of St. Louis FRED",
+                    "fetched_at": fetched_at,
+                    "raw_metadata": {
+                        "label": (payload.get("series") or {}).get(series_id, {}).get("label"),
+                        "unit": (payload.get("series") or {}).get(series_id, {}).get("unit"),
+                    },
+                })
+            except (KeyError, TypeError, ValueError):
+                continue
+    return _archive_reference_rows(
+        "macro_observations", rows, "series_id,observation_date,source"
+    )
