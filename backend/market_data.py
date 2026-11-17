@@ -206,7 +206,9 @@ def get_market_candles(timeframe):
     last_candle = candles[-1]
     now = int(time.time())
     age_seconds = max(0, now - (last_candle["time"] + interval_seconds))
-    freshness_limit = max(1200, int(interval_seconds * 1.5))
+    # Keep short timeframes strict; longer timeframes get a proportionate window.
+    # Stale candles must never be treated as current trading conditions.
+    freshness_limit = max(180, int(interval_seconds * 2))
     status = "recent" if age_seconds <= freshness_limit else "stale"
     last_candle_at = datetime.fromtimestamp(
         last_candle["time"], timezone.utc
