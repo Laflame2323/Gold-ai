@@ -95,6 +95,14 @@
         <div class="monitor-foot"><span id="monitorMessage">Connecting to the XAUS reference feed…</span><span class="monitor-readonly">READ ONLY · NO TRADES</span></div>
       </section>
 
+      <section class="panel regime-panel" id="market-regime">
+        <div class="panel-heading"><div><p class="eyebrow">MARKET STRUCTURE INTELLIGENCE</p><h2>Market regime detector</h2></div><span class="small-tag" id="regimeState">AWAITING ANALYSIS</span></div>
+        <div class="regime-main"><strong id="regimeLabel">UNCONFIRMED</strong><span id="regimeDirection">NEUTRAL</span></div>
+        <p class="regime-explanation" id="regimeExplanation">Run an analysis to classify trend, range-like or mixed conditions.</p>
+        <div class="regime-alignments"><div><span>HIGHER TIMEFRAMES</span><strong id="regimeHigher">—</strong></div><div><span>ENTRY TIMEFRAMES</span><strong id="regimeEntry">—</strong></div><div><span>ALIGNMENT SCORE</span><strong id="regimeScore">—</strong></div></div>
+        <p class="regime-risk" id="regimeRisk">Research context only. Not a probability or trade instruction.</p>
+      </section>
+
       <section class="panel alerts-panel" id="market-alerts">
         <div class="panel-heading"><div><p class="eyebrow">LIVE FEED EVENTS</p><h2>Market alerts</h2></div><button class="clear-alerts" id="clearAlerts" type="button">Clear alerts</button></div>
         <div class="alert-list" id="alertList" aria-live="polite"><div class="alert-empty">No feed alerts. Gold AI is monitoring the market data.</div></div>
