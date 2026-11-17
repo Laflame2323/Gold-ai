@@ -21,7 +21,7 @@ The `GoldAI_ReadOnly_Bridge.mq5` Expert Advisor sends **completed XAUUSD candles
 - Broker server label, broker symbol, OHLC, tick volume, real volume, and spread points.
 - Broker-server timestamps converted to UTC using the current server/GMT offset. The offset used is recorded with each batch.
 
-The backend validates the token, symbol, timeframe, OHLC values, timestamp offset, and candle completion time before archiving. Broker candles are stored under a separate source label from the XAUS reference feed. MT5 does not provide a historical table of broker UTC-offset changes, so bars spanning a broker daylight-saving transition may need timestamp correction before cross-source research.
+The backend validates the token, symbol, timeframe, OHLC values, timestamp offset, and candle completion time before archiving. Broker candles are stored under a separate source label from the XAUS reference feed. Once verified broker candles are available, Gold AI automatically uses that single broker/symbol feed for chart candles and multi-timeframe analysis instead of mixing it with XAUS reference data. MT5 does not provide a historical table of broker UTC-offset changes, so bars spanning a broker daylight-saving transition may need timestamp correction before cross-source research.
 
 ## Important
 
