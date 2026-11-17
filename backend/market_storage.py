@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import math
 import hashlib
 import threading
 from datetime import datetime, timezone
@@ -97,7 +98,7 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
                 "low": float(row["low"]),
                 "close": float(row["close"]),
             }
-            if not all(value > 0 and __import__("math").isfinite(value) for value in values.values()):
+            if not all(value > 0 and math.isfinite(value) for value in values.values()):
                 continue
             if values["high"] < max(values["open"], values["close"], values["low"]):
                 continue
@@ -105,7 +106,7 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
                 continue
             volume = row.get("volume")
             volume = float(volume) if volume is not None else None
-            if volume is not None and (volume < 0 or not __import__("math").isfinite(volume)):
+            if volume is not None and (volume < 0 or not math.isfinite(volume)):
                 volume = None
             candles_by_time[stamp] = {"time": stamp, **values, "volume": volume}
         except (KeyError, TypeError, ValueError, OverflowError):
