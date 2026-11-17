@@ -5,6 +5,10 @@ let selectedTimeframe = "M15";
 let chart = null;
 let candleSeries = null;
 let candleResizeObserver = null;
+let spotRequestInFlight = false;
+let candleRequestInFlight = false;
+let lastSpotPrice = null;
+let lastCandleStamp = null;
 
 function setApiStatus(text, healthy = false) {
   $("apiStatus").textContent = text;
