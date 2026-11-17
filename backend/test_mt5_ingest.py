@@ -1,7 +1,11 @@
 import unittest
+import os
+from unittest.mock import patch
+from fastapi import HTTPException
 from datetime import datetime, timezone
 from pydantic import ValidationError
 from mt5_ingest import MT5Batch, normalise_mt5_batch
+from main import ingest_mt5_candles
 
 
 class MT5IngestionTests(unittest.TestCase):
@@ -54,6 +58,27 @@ class MT5IngestionTests(unittest.TestCase):
         })
         with self.assertRaises(ValueError):
             normalise_mt5_batch(batch, self.now)
+
+
+    def test_ingestion_is_locked_when_token_is_not_configured(self):
+        batch = MT5Batch.model_validate({
+            "broker_server": "Broker-MT5", "symbol": "XAUUSD", "timeframe": "M1",
+            "candles": [{"time": 1767225540, "open": 1, "high": 2, "low": 1, "close": 2}]
+        })
+        with patch.dict(os.environ, {"MT5_INGEST_TOKEN": ""}):
+            with self.assertRaises(HTTPException) as error:
+                ingest_mt5_candles(batch, None)
+        self.assertEqual(error.exception.status_code, 503)
+
+    def test_invalid_ingestion_token_is_rejected(self):
+        batch = MT5Batch.model_validate({
+            "broker_server": "Broker-MT5", "symbol": "XAUUSD", "timeframe": "M1",
+            "candles": [{"time": 1767225540, "open": 1, "high": 2, "low": 1, "close": 2}]
+        })
+        with patch.dict(os.environ, {"MT5_INGEST_TOKEN": "expected-secret"}):
+            with self.assertRaises(HTTPException) as error:
+                ingest_mt5_candles(batch, "wrong-secret")
+        self.assertEqual(error.exception.status_code, 401)
 
     def test_unsupported_timeframe_is_rejected(self):
         with self.assertRaises(ValidationError):
