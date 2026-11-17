@@ -140,17 +140,12 @@ def _fetch_provider_candles(interval, period):
         f"{BASE_URL}?{query}",
         headers={"Accept": "application/json", "User-Agent": "GoldAI/1.0"},
     )
-    try:
-        with urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        if exc.code == 429:
-            raise MarketDataError(
-                "XAUS rate limit reached. Please wait one minute and retry."
-            ) from exc
-        raise MarketDataError(f"XAUS candle service returned HTTP {exc.code}.") from exc
-    except (URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise MarketDataError("Could not retrieve candle data from XAUS.") from exc
+    payload = _fetch_json_with_retries(
+        request,
+        "Could not retrieve candle data from XAUS after retrying transient failures.",
+        attempts=3,
+        timeout=20,
+    )
 
     if not isinstance(payload, dict):
         raise MarketDataError("XAUS returned an invalid candle response.")
