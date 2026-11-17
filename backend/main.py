@@ -1,8 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
+from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, get_market_candles
 import json
 
@@ -42,11 +44,56 @@ def health():
 
 @app.get("/analyse")
 def analyse():
+    selected_timeframes = ["M1", "M5", "M15", "M30", "H1", "H4"]
+    market_data = {}
+    provider_errors = {}
+
+    # Fetch all timeframes concurrently so one slow request does not delay
+    # the other five unnecessarily.
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        jobs = {
+            executor.submit(get_market_candles, timeframe): timeframe
+            for timeframe in selected_timeframes
+        }
+        for job in as_completed(jobs):
+            timeframe = jobs[job]
+            try:
+                market_data[timeframe] = job.result()
+            except Exception as exc:
+                provider_errors[timeframe] = str(exc)
+
+    analysis = analyse_timeframes(market_data)
+    if provider_errors:
+        error_summary = "; ".join(
+            f"{timeframe}: {message}"
+            for timeframe, message in sorted(provider_errors.items())
+        )
+        analysis["analysis_status"] = "data_not_ready"
+        analysis["research_signal"] = "WAIT"
+        analysis["technical_bias"] = "NEUTRAL"
+        analysis["message"] += " Provider errors: " + error_summary
+
+    message = analysis["message"]
+    if analysis["research_signal"] in {"BUY", "SELL"}:
+        message += (
+            " Gold AI still displays WAIT as its trade signal because this is "
+            "a reference-market feed, not your MT5 broker's execution feed."
+        )
+    else:
+        message += (
+            " The current feed is reference-market data, not your MT5 broker's "
+            "execution feed."
+        )
+
     return {
         "symbol": "XAUUSD",
         "signal": "WAIT",
-        "message": "Candle-data connection is being validated before technical signals are enabled.",
-        "ai_trained": False
+        "ai_trained": False,
+        "execution_ready": False,
+        "research_only": True,
+        "data_source": "XAUS reference-market feed",
+        "message": message,
+        **analysis
     }
 
 
