@@ -74,11 +74,14 @@ def normalise_cot_rows(raw_rows):
         record["managed_money_net_change"] = (
             record["managed_money_net"] - previous["managed_money_net"] if previous else None
         )
-    recent = [item["managed_money_net"] for item in records[-156:]]
-    latest = records[-1]["managed_money_net"]
-    records[-1]["managed_money_net_percentile_3y"] = round(
-        100 * sum(value <= latest for value in recent) / len(recent), 1
-    )
+    # Rolling percentile uses only reports available up to each observation.
+    # It is a descriptive historical rank, not a forecast or trade signal.
+    for index, record in enumerate(records):
+        window = [item["managed_money_net"] for item in records[max(0, index - 155):index + 1]]
+        current = record["managed_money_net"]
+        record["managed_money_net_percentile_3y"] = round(
+            100 * sum(value <= current for value in window) / len(window), 1
+        )
     return records
 
 
