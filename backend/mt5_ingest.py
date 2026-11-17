@@ -40,7 +40,7 @@ class MT5Batch(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     timeframe: str
     server_utc_offset_seconds: int = Field(ge=-50400, le=50400)
-    candles: list[MT5Candle] = Field(min_length=1, max_length=500)
+    candles: list[MT5Candle] = Field(min_length=1, max_length=5000)
 
     @field_validator("broker_server", "symbol")
     @classmethod
@@ -108,7 +108,27 @@ def normalise_mt5_batch(batch: MT5Batch, now: datetime | None = None) -> list[di
 
 
 def archive_mt5_batch(batch: MT5Batch) -> dict:
+    """Archive larger historical batches in bounded, retry-safe Supabase writes."""
     rows = normalise_mt5_batch(batch)
-    return _archive_reference_rows(
-        "market_candles", rows, "symbol,timeframe,candle_time,source"
-    )
+    chunk_size = 500
+    rows_saved = 0
+    chunks_saved = 0
+    for start in range(0, len(rows), chunk_size):
+        chunk = rows[start:start + chunk_size]
+        result = _archive_reference_rows(
+            "market_candles", chunk, "symbol,timeframe,candle_time,source"
+        )
+        if result.get("status") != "saved":
+            return {
+                "status": "error",
+                "rows_sent": rows_saved,
+                "chunks_saved": chunks_saved,
+                "message": result.get("message", "A candle archive batch failed."),
+            }
+        rows_saved += result.get("rows_sent", len(chunk))
+        chunks_saved += 1
+    return {
+        "status": "saved",
+        "rows_sent": rows_saved,
+        "chunks_saved": chunks_saved,
+    }
