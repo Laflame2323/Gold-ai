@@ -39,6 +39,7 @@ class MT5Batch(BaseModel):
     broker_server: str = Field(min_length=1, max_length=100)
     symbol: str = Field(min_length=1, max_length=32)
     timeframe: str
+    server_utc_offset_seconds: int | None = Field(default=None, ge=-50400, le=50400)
     candles: list[MT5Candle] = Field(min_length=1, max_length=500)
 
     @field_validator("broker_server", "symbol")
@@ -90,6 +91,9 @@ def normalise_mt5_batch(batch: MT5Batch, now: datetime | None = None) -> list[di
             "raw_metadata": {
                 "feed_type": "authenticated_mt5_read_only",
                 "broker_server": batch.broker_server,
+                "server_utc_offset_seconds": batch.server_utc_offset_seconds,
+                "timestamp_basis": "UTC_converted_from_broker_server_time",
+                "historical_dst_offset_reconstructed": False,
                 "tick_volume": candle.tick_volume,
                 "real_volume": candle.real_volume,
                 "spread_points": candle.spread_points,
