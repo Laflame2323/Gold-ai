@@ -23,6 +23,7 @@
       <nav class="side-nav" aria-label="Main navigation">
         <a class="nav-link active" href="#overview"><span class="nav-icon">▦</span> Overview</a>
         <a class="nav-link" href="#market-chart"><span class="nav-icon">⌁</span> Live market</a>
+        <a class="nav-link" href="#live-monitor"><span class="nav-icon">◉</span> Live monitor</a>
         <a class="nav-link" href="#ai-signal"><span class="nav-icon">✳</span> AI analysis</a>
         <a class="nav-link" href="#assistant"><span class="nav-icon">◌</span> AI assistant</a>
       </nav>
@@ -74,6 +75,17 @@
         </div>
       </section>
 
+
+      <section class="panel monitor-panel" id="live-monitor">
+        <div class="panel-heading"><div><p class="eyebrow">CONTINUOUS FEED WATCH</p><h2>Live market monitor</h2></div><span class="monitor-pill" id="monitorState"><i></i> STARTING</span></div>
+        <div class="monitor-grid">
+          <div class="monitor-metric"><span>SPOT FEED</span><strong id="monitorSpotState">Checking</strong><small id="monitorSpotTime">Waiting for first update</small></div>
+          <div class="monitor-metric"><span>CANDLE FEED</span><strong id="monitorCandleState">Checking</strong><small id="monitorCandleTime">Waiting for first update</small></div>
+          <div class="monitor-metric"><span>LAST CLOSED BAR</span><strong id="monitorLastBar">—</strong><small id="monitorBarAge">Age not available</small></div>
+          <div class="monitor-metric"><span>NEXT CHECK</span><strong>15 seconds</strong><small>Spot feed · candles every 60 seconds</small></div>
+        </div>
+        <div class="monitor-foot"><span id="monitorMessage">Connecting to the XAUS reference feed…</span><span class="monitor-readonly">READ ONLY · NO TRADES</span></div>
+      </section>
       <div class="dashboard-grid">
         <section class="panel chart-panel" id="market-chart">
           <div class="panel-heading chart-heading">
