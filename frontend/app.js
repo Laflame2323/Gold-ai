@@ -11,6 +11,54 @@ let lastSpotPrice = null;
 let lastCandleStamp = null;
 let monitorRequestInFlight = false;
 const monitoredTimeframes = ["M1", "M5", "M15", "M30", "H1", "H4"];
+const feedHealth = new Map();
+let marketAlerts = [];
+
+function addMarketAlert(type, title, detail) {
+  const alert = { type, title, detail, time: new Date() };
+  marketAlerts.unshift(alert);
+  marketAlerts = marketAlerts.slice(0, 8);
+  renderMarketAlerts();
+}
+
+function renderMarketAlerts() {
+  const list = $("alertList");
+  if (!list) return;
+  if (!marketAlerts.length) {
+    list.innerHTML = '<div class="alert-empty">No feed alerts. Gold AI is monitoring the market data.</div>';
+    return;
+  }
+  list.replaceChildren();
+  marketAlerts.forEach((alert) => {
+    const item = document.createElement("div");
+    item.className = "market-alert " + alert.type;
+    const marker = document.createElement("span");
+    marker.className = "alert-marker";
+    const copy = document.createElement("div");
+    copy.className = "alert-copy";
+    const heading = document.createElement("strong");
+    heading.textContent = alert.title;
+    const description = document.createElement("small");
+    description.textContent = alert.detail;
+    const time = document.createElement("time");
+    time.textContent = alert.time.toLocaleTimeString();
+    copy.append(heading, description);
+    item.append(marker, copy, time);
+    list.appendChild(item);
+  });
+}
+
+function updateFeedAlert(key, healthy, label, detail) {
+  const previous = feedHealth.get(key);
+  feedHealth.set(key, healthy);
+  if (previous === undefined && !healthy) {
+    addMarketAlert("warning", label + " needs attention", detail);
+  } else if (previous === true && !healthy) {
+    addMarketAlert("warning", label + " became unavailable", detail);
+  } else if (previous === false && healthy) {
+    addMarketAlert("success", label + " recovered", detail);
+  }
+}
 
 function setApiStatus(text, healthy = false) {
   $("apiStatus").textContent = text;
@@ -116,6 +164,7 @@ async function loadGoldPrice() {
     $("monitorSpotTime").textContent = "Checked " + receivedAt.toLocaleTimeString() + (changed ? " · price changed" : "");
     $("monitorMessage").textContent = "Spot feed reachable. Price updates are checked every 15 seconds; provider timestamps remain authoritative.";
     updateMonitorState();
+    updateFeedAlert("spot", true, "Spot feed", "The reference spot-price endpoint is responding again.");
     setApiStatus("Connected", true);
   } catch (error) {
     $("goldPrice").textContent = "Unavailable";
@@ -124,6 +173,7 @@ async function loadGoldPrice() {
     $("monitorSpotTime").textContent = "Last check failed";
     $("monitorMessage").textContent = "Spot feed request failed. Waiting for the next automatic check.";
     updateMonitorState();
+    updateFeedAlert("spot", false, "Spot feed", "Gold AI could not retrieve the latest reference price.");
     setApiStatus("Offline", false);
   } finally {
     spotRequestInFlight = false;
@@ -199,6 +249,7 @@ async function loadCandles(timeframe = selectedTimeframe) {
     $("monitorBarAge").textContent = Number.isFinite(Number(data.age_seconds)) ? Math.floor(Number(data.age_seconds)) + " seconds old" : "Age unavailable";
     $("monitorMessage").textContent = recent ? "Candle feed is within its freshness limit. The monitor will continue checking for new completed bars." : "Candle feed is stale. Gold AI will show this warning and will not treat old candles as live conditions.";
     updateMonitorState();
+    updateFeedAlert("chart-candles", recent, timeframe + " chart candles", recent ? "The selected timeframe has fresh closed candles." : "The selected timeframe data is older than its freshness limit.");
     $("feedStatus").textContent = recent ? "Recent" : "Stale";
     $("feedStatus").className = "status-text " + (recent ? "ok" : "bad");
     setChartStatus(recent ? "Recent data" : "Stale data", recent ? "connected" : "stale");
@@ -215,6 +266,7 @@ async function loadCandles(timeframe = selectedTimeframe) {
     $("monitorCandleTime").textContent = "Last check failed";
     $("monitorMessage").textContent = "Candle request failed. The monitor will retry automatically.";
     updateMonitorState();
+    updateFeedAlert("chart-candles", false, timeframe + " chart candles", "The candle endpoint could not be reached.");
     setChartStatus("Feed unavailable", "error");
   } finally {
     candleRequestInFlight = false;
@@ -235,6 +287,8 @@ async function refreshAllTimeframeMonitor() {
     }
   }));
   results.forEach((item) => {
+    const healthy = !item.error && item.recent;
+    updateFeedAlert("timeframe-" + item.timeframe, healthy, item.timeframe + " timeframe", item.error ? item.error : healthy ? "Closed-candle data is within its freshness limit." : "The latest closed candle is outside its freshness limit.");
     const state = $("tf-" + item.timeframe);
     const detail = $("tf-detail-" + item.timeframe);
     if (!state || !detail) return;
@@ -360,6 +414,7 @@ document.querySelectorAll("[data-timeframe]").forEach((button) => {
 });
 
 $("analyzeBtn").addEventListener("click", analyseGold);
+$("clearAlerts").addEventListener("click", () => { marketAlerts = []; renderMarketAlerts(); });
 $("refreshBtn").addEventListener("click", () => {
   loadGoldPrice();
   loadCandles(selectedTimeframe);
