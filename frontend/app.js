@@ -9,6 +9,8 @@ let spotRequestInFlight = false;
 let candleRequestInFlight = false;
 let lastSpotPrice = null;
 let lastCandleStamp = null;
+let monitorRequestInFlight = false;
+const monitoredTimeframes = ["M1", "M5", "M15", "M30", "H1", "H4"];
 
 function setApiStatus(text, healthy = false) {
   $("apiStatus").textContent = text;
@@ -219,6 +221,41 @@ async function loadCandles(timeframe = selectedTimeframe) {
   }
 }
 
+async function refreshAllTimeframeMonitor() {
+  if (monitorRequestInFlight) return;
+  monitorRequestInFlight = true;
+  const results = await Promise.all(monitoredTimeframes.map(async (timeframe) => {
+    try {
+      const response = await fetch(API_URL + "/market/candles?timeframe=" + timeframe, { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const data = await response.json();
+      return { timeframe, recent: data.data_status === "recent", age: data.age_seconds, last: data.last_candle_at, count: data.count };
+    } catch (error) {
+      return { timeframe, error: error.message };
+    }
+  }));
+  results.forEach((item) => {
+    const state = $("tf-" + item.timeframe);
+    const detail = $("tf-detail-" + item.timeframe);
+    if (!state || !detail) return;
+    if (item.error) {
+      state.textContent = "OFFLINE";
+      state.className = "tf-state bad";
+      detail.textContent = item.error;
+    } else {
+      state.textContent = item.recent ? "RECENT" : "STALE";
+      state.className = "tf-state " + (item.recent ? "ok" : "bad");
+      const age = Number.isFinite(Number(item.age)) ? Math.floor(Number(item.age)) + "s old" : "age n/a";
+      const bar = item.last ? new Date(item.last).toLocaleTimeString() : "bar time n/a";
+      detail.textContent = bar + " · " + age;
+    }
+  });
+  const healthy = results.filter((item) => !item.error && item.recent).length;
+  const summary = $("monitorTimeframeSummary");
+  if (summary) summary.textContent = healthy + " / " + monitoredTimeframes.length + " timeframes recent";
+  monitorRequestInFlight = false;
+}
+
 function updateMonitorState() {
   const spotText = $("monitorSpotState").textContent;
   const spotOk = spotText !== "OFFLINE" && spotText !== "Checking";
@@ -331,11 +368,14 @@ $("chatForm").addEventListener("submit", sendAssistantMessage);
 
 loadGoldPrice();
 loadCandles("M15");
+refreshAllTimeframeMonitor();
 setInterval(loadGoldPrice, 15000);
 setInterval(() => loadCandles(selectedTimeframe), 60000);
+setInterval(refreshAllTimeframeMonitor, 60000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     loadGoldPrice();
     loadCandles(selectedTimeframe);
+    refreshAllTimeframeMonitor();
   }
 });
