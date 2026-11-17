@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from urllib.request import urlopen
@@ -11,6 +11,9 @@ from market_storage import archive_market_candles, archive_daily_history, archiv
 from cot_data import COTDataError, get_gold_cot
 from macro_data import MacroDataError, get_macro_context
 import json
+import hmac
+import os
+from mt5_ingest import MT5Batch, archive_mt5_batch
 
 
 app = FastAPI(
@@ -132,6 +135,36 @@ def gold_cot():
         raise HTTPException(status_code=502, detail=str(exc))
     payload["archive"] = archive_gold_cot(payload)
     return payload
+
+
+@app.post("/broker/mt5/candles")
+def ingest_mt5_candles(
+    payload: MT5Batch,
+    x_mt5_token: str | None = Header(default=None, alias="X-MT5-Token"),
+):
+    """Accept authenticated, read-only, completed MT5 candles."""
+    expected_token = os.getenv("MT5_INGEST_TOKEN", "")
+    if not expected_token:
+        raise HTTPException(
+            status_code=503,
+            detail="MT5 ingestion is locked until MT5_INGEST_TOKEN is configured.",
+        )
+    if not x_mt5_token or not hmac.compare_digest(expected_token, x_mt5_token):
+        raise HTTPException(status_code=401, detail="Invalid MT5 ingestion token.")
+    try:
+        result = archive_mt5_batch(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if result.get("status") != "saved":
+        raise HTTPException(status_code=503, detail="Broker candle archive is unavailable.")
+    return {
+        "status": "saved",
+        "rows_sent": result.get("rows_sent", 0),
+        "symbol": payload.symbol,
+        "timeframe": payload.timeframe,
+        "broker_server": payload.broker_server,
+        "read_only": True,
+    }
 
 
 @app.get("/market/spot")
