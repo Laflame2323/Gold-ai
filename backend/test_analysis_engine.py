@@ -48,7 +48,6 @@ class AnalysisEngineTests(unittest.TestCase):
         data["H4"] = make_payload(count=30)
         result = analyse_timeframes(data)
         self.assertEqual(result["research_signal"], "WAIT")
-        self.assertIn("H4", result["missing_timeframes"]) if False else None
         self.assertEqual(result["timeframes"]["H4"]["status"], "insufficient_data")
 
     def test_missing_timeframe_forces_wait(self):
