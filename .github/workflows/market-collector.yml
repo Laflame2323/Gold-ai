@@ -58,14 +58,25 @@ jobs:
               if result.get("status") != "saved"
           }
           missing = sorted(required - set(archives))
+          history = payload.get("history_archive") or {}
+          history_failed = {
+              name: result.get("status", "missing")
+              for name, result in history.items()
+              if result.get("status") != "saved"
+          }
+          for name in ("daily", "intraday"):
+              if name not in history:
+                  history_failed[name] = "missing"
           print(json.dumps({
               "symbol": payload.get("symbol", "XAUUSD"),
               "saved_timeframes": saved,
               "failed_timeframes": failed,
               "missing_timeframes": missing,
+              "history_archive": history,
+              "history_failures": history_failed,
               "ai_trained": payload.get("ai_trained", False),
               "research_only": payload.get("research_only", True),
           }, indent=2))
-          if failed or missing:
+          if failed or missing or history_failed:
               sys.exit(1)
           PY
