@@ -64,6 +64,7 @@ jobs:
               "rows_sent": archive.get("rows_sent", 0),
           }
           print(json.dumps(summary, indent=2))
+          print("CFTC weekly positioning archive verification completed.")
           if not summary["records"] or archive.get("status") != "saved":
               sys.exit(1)
           PY
