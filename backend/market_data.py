@@ -150,8 +150,9 @@ def _fetch_provider_candles(interval, period):
     return result
 
 
-def _aggregate_h4(hourly_candles):
-    """Build completed 4-hour candles; skip groups with missing H1 bars."""
+def _aggregate_h4(hourly_candles, now=None):
+    """Build completed 4-hour candles; skip missing or still-forming groups."""
+    now = int(time.time()) if now is None else int(now)
     buckets = {}
     for candle in hourly_candles:
         bucket_start = (candle["time"] // 14_400) * 14_400
@@ -161,6 +162,9 @@ def _aggregate_h4(hourly_candles):
     for bucket_start in sorted(buckets):
         group = sorted(buckets[bucket_start], key=lambda item: item["time"])
         expected_times = [bucket_start + hour * 3600 for hour in range(4)]
+        # Four timestamps do not prove the final H1 candle has closed.
+        if bucket_start + 14_400 > now:
+            continue
         if len(group) != 4 or [item["time"] for item in group] != expected_times:
             continue
         volumes = [item["volume"] for item in group]
@@ -193,7 +197,16 @@ def get_market_candles(timeframe):
     elif timeframe in TIMEFRAME_CONFIG:
         interval, period, interval_seconds = TIMEFRAME_CONFIG[timeframe]
         upstream = _fetch_provider_candles(interval, period)
-        candles = upstream["candles"]
+        now = int(time.time())
+        # Exclude the currently forming candle; indicators should use closed bars only.
+        candles = [
+            candle for candle in upstream["candles"]
+            if candle["time"] + interval_seconds <= now
+        ]
+        if not candles:
+            raise MarketDataError(
+                f"No completed {timeframe} candles are available yet."
+            )
         provider_interval = interval
         provider_range = period
         provider_updated_at = upstream["provider_updated_at"]
