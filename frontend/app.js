@@ -323,6 +323,32 @@ function updateMonitorState() {
 
 
 
+
+async function loadMacroContext() {
+  const status = $("macroStatus");
+  try {
+    const response = await fetch(API_URL + "/research/macro", { cache: "no-store" });
+    if (!response.ok) throw new Error("Macro endpoint returned " + response.status);
+    const data = await response.json();
+    const display = (id, seriesId, digits = 2) => {
+      const item = (data.series || {})[seriesId];
+      $(id).textContent = item ? Number(item.value).toFixed(digits) + (item.unit === "%" ? "%" : "") : "Unavailable";
+      const dateId = id + "Date";
+      if ($(dateId)) $(dateId).textContent = item ? item.observation_date : "No observation";
+    };
+    display("macroDgs10", "DGS10");
+    display("macroDfii10", "DFII10");
+    display("macroDollar", "DTWEXBGS", 2);
+    display("macroVix", "VIXCLS", 2);
+    const failed = Object.keys(data.errors || {}).length;
+    status.textContent = failed ? "PARTIAL MACRO DATA" : "FRED DATA CONNECTED";
+    $("macroNote").textContent = data.data_note || "Daily macro observations are delayed and may have different publication dates.";
+  } catch (error) {
+    status.textContent = "MACRO DATA UNAVAILABLE";
+    $("macroNote").textContent = "FRED data could not be loaded. Gold AI will not estimate missing macro values.";
+  }
+}
+
 function renderCotHistory(history) {
   const container = $("cotHistory");
   if (!container) return;
@@ -488,7 +514,7 @@ $("chatForm").addEventListener("submit", sendAssistantMessage);
 
 loadGoldPrice();
 loadCandles("M15");
-loadCotPositioning();
+loadCotPositioning();\nloadMacroContext();
 refreshAllTimeframeMonitor();
 setInterval(loadGoldPrice, 15000);
 setInterval(() => loadCandles(selectedTimeframe), 60000);
