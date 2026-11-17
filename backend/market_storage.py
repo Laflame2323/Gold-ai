@@ -23,10 +23,11 @@ _candle_archive_cache = {}
 _candle_archive_lock = threading.Lock()
 
 
-def _candle_window_signature(candles):
+def _candle_window_signature(candles, data_status=None):
     fields = ("time", "open", "high", "low", "close", "volume")
     stable_rows = [{field: candle.get(field) for field in fields} for candle in candles]
-    encoded = json.dumps(stable_rows, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    stable_payload = {"candles": stable_rows, "data_status": data_status}
+    encoded = json.dumps(stable_payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -118,7 +119,7 @@ def archive_market_candles(market_data: dict) -> dict:
         return {"status": "no_valid_rows", "rows_sent": 0}
 
     cache_key = (base_url, symbol, timeframe, source)
-    signature = _candle_window_signature(candles)
+    signature = _candle_window_signature(candles, data_status)
     with _candle_archive_lock:
         if _candle_archive_cache.get(cache_key) == signature:
             return {
