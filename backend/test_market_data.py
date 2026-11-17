@@ -65,7 +65,7 @@ class MarketDataTests(unittest.TestCase):
             for index in range(3)
         ]
         with self.assertRaises(MarketDataError):
-            _aggregate_h4(rows)
+            _aggregate_h4(rows, now=start + 14_400)
 
 
 if __name__ == "__main__":
