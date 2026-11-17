@@ -167,6 +167,18 @@ def ingest_mt5_candles(
     }
 
 
+@app.get("/research/macro")
+def macro_context():
+    """Return public FRED macro context and archive its daily observations."""
+    try:
+        payload = get_macro_context()
+    except MacroDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    payload["archive"] = archive_macro_context(payload)
+    return payload
+
+
+
 @app.get("/market/spot")
 def gold_spot():
     url = "https://xaus.com/api/v1/spot?compact=1"
