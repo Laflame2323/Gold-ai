@@ -11,6 +11,7 @@ from cot_data import COTDataError, get_gold_cot
 from macro_data import MacroDataError, get_macro_context
 import json
 import hmac
+import math
 import os
 from mt5_ingest import MT5Batch, archive_mt5_batch
 
@@ -195,12 +196,14 @@ def gold_spot():
             raise HTTPException(status_code=502, detail="Gold price response was invalid.")
 
         price = data.get("spot_usd_oz")
-        if price is None:
+        if isinstance(price, bool) or not isinstance(price, (int, float)):
             raise HTTPException(status_code=502, detail="Gold price unavailable")
+        if not math.isfinite(float(price)) or float(price) <= 0:
+            raise HTTPException(status_code=502, detail="Gold price response was invalid.")
 
         return {
             "symbol": "XAUUSD",
-            "price": price,
+            "price": float(price),
             "currency": "USD",
             "unit": "troy ounce",
             "updated_at": data.get("updated_at"),
