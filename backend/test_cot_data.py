@@ -6,7 +6,7 @@ class COTNormalisationTests(unittest.TestCase):
     def test_managed_money_net_and_weekly_change(self):
         rows = [
             {"report_date_as_yyyy_mm_dd":"2026-11-03T00:00:00.000","open_interest_all":"1000","m_money_positions_long_all":"600","m_money_positions_short_all":"300","prod_merc_positions_long":"200","prod_merc_positions_short":"250","swap_positions_long_all":"120","swap__positions_short_all":"100"},
-            {"report_date_as_yyyy_mm_dd":"2026-11-10T00:00:00.000","open_interest_all":"1100","m_money_positions_long_all":"650","m_money_positions_short_all":"300"},
+            {"report_date_as_yyyy_mm_dd":"2026-11-10T00:00:00.000","open_interest_all":"1100","m_money_positions_long_all":"650","m_money_positions_short_all":"300","prod_merc_positions_long":"200","prod_merc_positions_short":"250","swap_positions_long_all":"120","swap__positions_short_all":"100"},
         ]
         result = normalise_cot_rows(rows)
         self.assertEqual(result[-1]["managed_money_net"], 350)
