@@ -247,3 +247,95 @@ def get_market_candles(timeframe):
             "prices; verify before using signals for trading."
         ),
     }
+
+
+
+def get_daily_history():
+    """Fetch up to five years of daily XAU/USD history without fabricating OHLC."""
+    request = Request(
+        "https://xaus.com/api/v1/history",
+        headers={"Accept": "application/json", "User-Agent": "GoldAI/1.0"},
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise MarketDataError("Could not retrieve XAUS daily gold history.") from exc
+    points = payload.get("points") if isinstance(payload, dict) else None
+    if not isinstance(points, list):
+        raise MarketDataError("XAUS daily history returned an unexpected format.")
+    valid = []
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        try:
+            day = datetime.fromisoformat(str(point["d"])).date().isoformat()
+            close = float(point["c"])
+            high = float(point["h"]) if point.get("h") is not None else None
+            low = float(point["l"]) if point.get("l") is not None else None
+            values = [v for v in (close, high, low) if v is not None]
+            if not all(math.isfinite(v) for v in values) or close <= 0:
+                continue
+            if high is not None and high < close:
+                continue
+            if low is not None and low > close:
+                continue
+            valid.append({"date": day, "close": close, "high": high, "low": low})
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    if not valid:
+        raise MarketDataError("XAUS daily history contained no valid records.")
+    return {
+        "symbol": "XAUUSD",
+        "points": valid,
+        "count": len(valid),
+        "data_state": payload.get("data_state"),
+        "source": "XAUS daily history API",
+        "high_52w": payload.get("high_52w"),
+        "low_52w": payload.get("low_52w"),
+        "return_1y_pct": payload.get("return_1y_pct"),
+        "return_ytd_pct": payload.get("return_ytd_pct"),
+    }
+
+
+def get_intraday_prices(hours=48):
+    """Fetch XAUS first-party sampled prices; these are ticks, not OHLC candles."""
+    selected_hours = max(1, min(int(hours), 48))
+    query = urlencode({"symbol": "xau", "hours": selected_hours})
+    request = Request(
+        f"https://xaus.com/api/v1/intraday?{query}",
+        headers={"Accept": "application/json", "User-Agent": "GoldAI/1.0"},
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise MarketDataError("Could not retrieve XAUS intraday gold history.") from exc
+    points = payload.get("points") if isinstance(payload, dict) else None
+    if not isinstance(points, list):
+        raise MarketDataError("XAUS intraday history returned an unexpected format.")
+    valid = []
+    seen = set()
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        try:
+            stamp = _timestamp_seconds(point["t"])
+            price = float(point["p"])
+            if stamp in seen or not math.isfinite(price) or price <= 0:
+                continue
+            seen.add(stamp)
+            valid.append({"time": stamp, "price": price})
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    valid.sort(key=lambda item: item["time"])
+    if not valid:
+        raise MarketDataError("XAUS intraday history contained no valid records.")
+    return {
+        "symbol": "XAUUSD",
+        "points": valid,
+        "count": len(valid),
+        "coverage_seconds": payload.get("coverage_seconds"),
+        "data_state": payload.get("data_state"),
+        "source": "XAUS first-party intraday API",
+    }
