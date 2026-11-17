@@ -34,5 +34,14 @@ class GoldSpotRetryTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 502)
 
 
+    @patch("main._fetch_json_with_retries")
+    def test_gold_spot_rejects_non_positive_or_non_finite_prices(self, fetch_json):
+        for invalid_price in (0, -1, float("nan"), float("inf"), True, "4321.5"):
+            with self.subTest(price=invalid_price):
+                fetch_json.return_value = {"spot_usd_oz": invalid_price}
+                with self.assertRaises(HTTPException) as raised:
+                    main.gold_spot()
+                self.assertEqual(raised.exception.status_code, 502)
+
 if __name__ == "__main__":
     unittest.main()
