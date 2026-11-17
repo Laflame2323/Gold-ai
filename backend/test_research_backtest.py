@@ -12,8 +12,8 @@ def trend_candles(count=240, rising=True):
         rows.append({
             "time": 1_700_000_000 + index * 60,
             "open": price - change / 2,
-            "high": price + 0.1,
-            "low": price - 0.1,
+            "high": max(price - change / 2, price) + 0.1,
+            "low": min(price - change / 2, price) - 0.1,
             "close": price,
         })
     return rows
