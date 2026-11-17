@@ -20,6 +20,7 @@ Gold AI is a research-first XAUUSD market-monitoring application. It collects re
 - FRED macro context and official CFTC gold positioning context.
 - Collector-run audit records.
 - Authenticated, read-only MT5 candle ingestion with broker timestamp conversion.
+- Safe MT5 status endpoint at /broker/mt5/status; it reports configuration and feed presence without exposing the secret.
 - When verified MT5 data exists, the analysis and chart endpoints select that one broker/symbol feed and never mix it with XAUS reference candles.
 - MT5 Expert Advisor source in mt5/GoldAI_ReadOnly_Bridge.mq5.
 
