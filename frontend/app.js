@@ -514,7 +514,8 @@ $("chatForm").addEventListener("submit", sendAssistantMessage);
 
 loadGoldPrice();
 loadCandles("M15");
-loadCotPositioning();\nloadMacroContext();
+loadCotPositioning();
+loadMacroContext();
 refreshAllTimeframeMonitor();
 setInterval(loadGoldPrice, 15000);
 setInterval(() => loadCandles(selectedTimeframe), 60000);
