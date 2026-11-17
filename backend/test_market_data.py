@@ -58,6 +58,14 @@ class MarketDataTests(unittest.TestCase):
         self.assertEqual([item["time"] for item in result], [60, 120])
         self.assertEqual(result[0]["close"], 1.6)
 
+    def test_normalise_rejects_zero_or_negative_prices(self):
+        rows = [
+            {"t": 60, "o": 0, "h": 2, "l": 0.5, "c": 1},
+            {"t": 120, "o": 2, "h": 3, "l": -1, "c": 2},
+        ]
+        with self.assertRaises(MarketDataError):
+            _normalise_candles(rows)
+
     def test_h4_aggregation(self):
         start = (1_800_000_000 // 14_400) * 14_400
         rows = [
