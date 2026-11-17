@@ -1,20 +1,14 @@
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 import json
-
-
 app = FastAPI(
     title="Gold AI",
     description="Gold Trading Analysis API",
     version="1.2.0"
 )
-
-
-# Allow the website to communicate with the backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,12 +16,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
 class AssistantRequest(BaseModel):
     prompt: str
-
-
 @app.get("/")
 def home():
     return {
@@ -35,13 +25,9 @@ def home():
         "name": "Gold AI",
         "message": "Gold AI backend is running"
     }
-
-
 @app.get("/health")
 def health():
     return {"status": "healthy"}
-
-
 @app.get("/analyse")
 def analyse():
     return {
@@ -50,24 +36,18 @@ def analyse():
         "message": "Waiting for reliable market data and technical analysis.",
         "ai_trained": False
     }
-
-
 @app.get("/market/spot")
 def gold_spot():
     url = "https://xaus.com/api/v1/spot?compact=1"
-
     try:
         with urlopen(url, timeout=15) as response:
             data = json.loads(response.read().decode("utf-8"))
-
         price = data.get("spot_usd_oz")
-
         if price is None:
             raise HTTPException(
                 status_code=502,
                 detail="Gold price unavailable"
             )
-
         return {
             "symbol": "XAUUSD",
             "price": price,
@@ -78,27 +58,18 @@ def gold_spot():
             "data_state": data.get("data_state"),
             "source": "XAUS"
         }
-
     except HTTPException:
         raise
-
     except (URLError, HTTPError, TimeoutError, ValueError):
         raise HTTPException(
             status_code=502,
             detail="Could not retrieve Gold market data"
         )
-
-
 @app.post("/assistant")
 def assistant(payload: AssistantRequest):
     prompt = payload.prompt.strip().lower()
-
     if not prompt:
-        return {
-            "response": "Please enter a message."
-        }
-
-    # Check trading execution requests
+        return {"response": "Please enter a message."}
     if any(word in prompt for word in [
         "execute",
         "open trade",
@@ -114,8 +85,6 @@ def assistant(payload: AssistantRequest):
                 "MT5 integration and testing are still required."
             )
         }
-
-    # Check gold market analysis requests
     if any(word in prompt for word in [
         "analyse",
         "analyze",
@@ -126,21 +95,18 @@ def assistant(payload: AssistantRequest):
         try:
             market = gold_spot()
             price = float(market["price"])
-
             data_state = market.get("data_state") or {}
             status = data_state.get("status", "unknown")
-
             return {
                 "response": (
                     f"The latest indicative XAU/USD spot price is "
                     f"${price:,.2f} per troy ounce. "
                     f"Data status: {status}. "
                     "This spot price alone cannot generate a reliable "
-                    "BUY or SELL signal. We still need broker candle "
-                    "data and technical analysis across our six timeframes."
+                    "BUY or SELL signal. Broker candle data and "
+                    "technical analysis are still needed."
                 )
             }
-
         except Exception:
             return {
                 "response": (
@@ -148,7 +114,6 @@ def assistant(payload: AssistantRequest):
                     "Please try again later."
                 )
             }
-
     return {
         "response": (
             "Hello! I am Gold AI. You can ask me to analyse gold, "
@@ -156,17 +121,13 @@ def assistant(payload: AssistantRequest):
             "Advanced AI analysis and MT5 integration are still being developed."
         )
     }
-    # Gold AI assistant endpoint update
-    @app.get("/debug/build")
+@app.get("/debug/build")
 def debug_build():
     return {
         "build": "GOLD-AI-DEBUG-130",
         "version": app.version,
         "file": __file__,
-        "routes": [
-            route.path for route in app.routes
-        ]
+        "routes": [route.path for route in app.routes]
     }
-
 
 
