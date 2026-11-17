@@ -58,7 +58,8 @@ bool SendBatch(const int index, MqlRates &rates[])
    int serverOffsetSeconds = (int)(serverNow - utcNow);
    if(MathAbs(serverOffsetSeconds) > 14 * 3600) return false;
    string body = "{\"broker_server\":\"" + server +
-                 "\",\"symbol\":\"" + symbol +
+                 "\",\"server_utc_offset_seconds\":" + IntegerToString(serverOffsetSeconds) +
+                 ",\"symbol\":\"" + symbol +
                  "\",\"timeframe\":\"" + FrameNames[index] +
                  "\",\"candles\":[";
    for(int i = 0; i < count; i++)
