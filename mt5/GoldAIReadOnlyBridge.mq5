@@ -14,6 +14,7 @@ input int RequestTimeoutMs = 15000;
 ENUM_TIMEFRAMES Frames[6] = {PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4};
 string FrameNames[6] = {"M1", "M5", "M15", "M30", "H1", "H4"};
 datetime LastSentBar[6];
+int TimerSeconds = 15;
 
 string SafeLabel(const string value)
 {
@@ -121,8 +122,8 @@ int OnInit()
       Print("Gold AI: could not select broker symbol ", GoldSymbol);
       return INIT_FAILED;
    }
-   if(PollSeconds < 5) PollSeconds = 5;
-   EventSetTimer(PollSeconds);
+   TimerSeconds = (PollSeconds < 5 ? 5 : PollSeconds);
+   EventSetTimer(TimerSeconds);
    Print("Gold AI read-only bridge started for ", GoldSymbol,
          ". No trades or orders will be placed.");
    return INIT_SUCCEEDED;
