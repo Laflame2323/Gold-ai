@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import math
 
+from indicators.market_structure import analyse_market_structure
+
 
 TIMEFRAME_WEIGHTS = {
     "H4": 3.0,
@@ -168,6 +170,7 @@ def _analyse_one_timeframe(timeframe, payload):
         "macd_histogram": _round_or_none(macd_hist, 5),
         "atr14": _round_or_none(atr_value, 4),
         "reason": "; ".join(reasons) if reasons else "Indicators are mixed.",
+        "market_structure": analyse_market_structure(candles),
     }
 
 
