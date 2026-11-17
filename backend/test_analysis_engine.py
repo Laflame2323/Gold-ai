@@ -58,5 +58,19 @@ class AnalysisEngineTests(unittest.TestCase):
         self.assertIn("H1", result["missing_timeframes"])
 
 
+
+    def test_market_regime_requires_fresh_timeframes(self):
+        from analysis_engine import _market_regime
+        result = _market_regime({"H4":{"status":"stale_data"}}, 0.4)
+        self.assertEqual(result["label"], "UNCONFIRMED")
+
+    def test_market_regime_detects_bullish_trend(self):
+        from analysis_engine import _market_regime
+        results = {key:{"status":"ready","score":score}
+                   for key,score in {"H4":3,"H1":2,"M15":2,"M5":1}.items()}
+        result = _market_regime(results, 0.4)
+        self.assertEqual(result["label"], "UPTREND")
+        self.assertEqual(result["direction"], "BULLISH")
+
 if __name__ == "__main__":
     unittest.main()
