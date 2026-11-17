@@ -17,6 +17,126 @@ def _supabase_credentials():
     api_key = os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
     return base_url, api_key
 
+class MarketStorageError(Exception):
+    """Raised when private broker market data cannot be read safely."""
+
+
+MT5_TIMEFRAME_SECONDS = {
+    "M1": 60, "M5": 300, "M15": 900,
+    "M30": 1800, "H1": 3600, "H4": 14400,
+}
+
+
+def _read_supabase_rows(query):
+    base_url, api_key = _supabase_credentials()
+    if not base_url or not api_key:
+        raise MarketStorageError("Supabase private credentials are not configured.")
+    request = Request(
+        f"{base_url}/rest/v1/market_candles?{query}",
+        headers={
+            "apikey": api_key,
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise MarketStorageError("Could not read the private MT5 candle archive.") from exc
+    if not isinstance(payload, list):
+        raise MarketStorageError("Supabase returned an invalid MT5 candle response.")
+    return payload
+
+
+def get_latest_mt5_source():
+    """Return the most recently received verified broker symbol/source, if any."""
+    query = urlencode({
+        "select": "symbol,source,fetched_at",
+        "source": "like.MT5:*",
+        "order": "fetched_at.desc",
+        "limit": "1",
+    })
+    rows = _read_supabase_rows(query)
+    if not rows:
+        return None
+    row = rows[0]
+    symbol = row.get("symbol")
+    source = row.get("source")
+    if not isinstance(symbol, str) or not symbol or not isinstance(source, str) or not source.startswith("MT5:"):
+        raise MarketStorageError("The latest MT5 archive source is invalid.")
+    return {"symbol": symbol, "source": source, "fetched_at": row.get("fetched_at")}
+
+
+def get_mt5_market_candles(symbol, source, timeframe, now=None):
+    """Read one broker-specific timeframe; never mix brokers or reference feeds."""
+    if timeframe not in MT5_TIMEFRAME_SECONDS:
+        raise MarketStorageError("Unsupported MT5 timeframe.")
+    query = urlencode({
+        "select": "candle_time,open,high,low,close,volume,fetched_at,quality_status,is_closed",
+        "symbol": f"eq.{symbol}",
+        "source": f"eq.{source}",
+        "timeframe": f"eq.{timeframe}",
+        "is_closed": "eq.true",
+        "quality_status": "eq.verified",
+        "order": "candle_time.desc",
+        "limit": "500",
+    })
+    rows = _read_supabase_rows(query)
+    candles_by_time = {}
+    for row in rows:
+        try:
+            stamp_text = str(row["candle_time"]).replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(stamp_text)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            stamp = int(parsed.timestamp())
+            values = {
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+            }
+            if not all(value > 0 and __import__("math").isfinite(value) for value in values.values()):
+                continue
+            if values["high"] < max(values["open"], values["close"], values["low"]):
+                continue
+            if values["low"] > min(values["open"], values["close"], values["high"]):
+                continue
+            volume = row.get("volume")
+            volume = float(volume) if volume is not None else None
+            if volume is not None and (volume < 0 or not __import__("math").isfinite(volume)):
+                volume = None
+            candles_by_time[stamp] = {"time": stamp, **values, "volume": volume}
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+
+    candles = [candles_by_time[key] for key in sorted(candles_by_time)]
+    interval = MT5_TIMEFRAME_SECONDS[timeframe]
+    current = int((now or datetime.now(timezone.utc)).timestamp())
+    if candles:
+        last = candles[-1]
+        age_seconds = max(0, current - (last["time"] + interval))
+        last_candle_at = datetime.fromtimestamp(last["time"], timezone.utc).isoformat()
+    else:
+        age_seconds = None
+        last_candle_at = None
+    freshness_limit = max(180, interval * 2)
+    data_status = "recent" if age_seconds is not None and age_seconds <= freshness_limit else "stale"
+
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "count": len(candles),
+        "candles": candles,
+        "last_candle_at": last_candle_at,
+        "age_seconds": age_seconds,
+        "data_status": data_status,
+        "source": "authenticated MT5 broker feed",
+        "provider_source": source,
+        "warning": "Broker candles are read-only research data. Execution readiness is evaluated separately.",
+    }
+
 # Avoid repeatedly upserting an unchanged closed-candle window on dashboard polls.
 # Update the signature only after Supabase confirms a successful write.
 _candle_archive_cache = {}
