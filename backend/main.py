@@ -7,7 +7,8 @@ from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, get_market_candles, get_daily_history, get_intraday_prices
-from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, record_collector_run
+from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, record_collector_run
+from cot_data import COTDataError, get_gold_cot
 import json
 
 
@@ -119,6 +120,17 @@ def analyse():
         **analysis,
         "message": message
     }
+
+
+@app.get("/research/cot")
+def gold_cot():
+    """Return delayed official CFTC gold positioning and archive its weekly history."""
+    try:
+        payload = get_gold_cot()
+    except COTDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    payload["archive"] = archive_gold_cot(payload)
+    return payload
 
 
 @app.get("/market/spot")
