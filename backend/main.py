@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from urllib.request import Request
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, _fetch_json_with_retries, get_market_candles, get_daily_history, get_intraday_prices
-from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run
+from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run, get_latest_mt5_source, get_mt5_market_candles, MarketStorageError
 from cot_data import COTDataError, get_gold_cot
 from macro_data import MacroDataError, get_macro_context
 import json
@@ -56,34 +56,61 @@ def analyse():
     market_data = {}
     archive_results = {}
     provider_errors = {}
+    mt5_source = None
+    mt5_archive_error = False
 
-    # Fetch all timeframes concurrently so one slow request does not delay
-    # the other five unnecessarily.
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        jobs = {
-            executor.submit(get_market_candles, timeframe): timeframe
-            for timeframe in selected_timeframes
-        }
-        for job in as_completed(jobs):
-            timeframe = jobs[job]
+    # Prefer one broker's own feed when it is present. Never mix MT5 and XAUS
+    # candles in the same analysis.
+    try:
+        mt5_source = get_latest_mt5_source()
+    except MarketStorageError as exc:
+        mt5_archive_error = True
+        provider_errors["MT5 archive"] = str(exc)[:300]
+
+    if mt5_source:
+        for timeframe in selected_timeframes:
             try:
-                market_data[timeframe] = job.result()
-                archive_results[timeframe] = archive_market_candles(market_data[timeframe])
+                market_data[timeframe] = get_mt5_market_candles(
+                    mt5_source["symbol"], mt5_source["source"], timeframe
+                )
             except Exception as exc:
                 provider_errors[timeframe] = str(exc)[:300]
+        history_archive = {}
+        collector_audit = {"status": "already_archived", "source": mt5_source["source"]}
+        data_source = "Authenticated MT5 broker feed (read-only)"
+        response_symbol = mt5_source["symbol"]
+    else:
+        # Reference feed is used only when no broker feed has been archived.
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            jobs = {
+                executor.submit(get_market_candles, timeframe): timeframe
+                for timeframe in selected_timeframes
+            }
+            for job in as_completed(jobs):
+                timeframe = job[job] if False else None
+                timeframe = jobs[job]
+                try:
+                    market_data[timeframe] = job.result()
+                    archive_results[timeframe] = archive_market_candles(market_data[timeframe])
+                except Exception as exc:
+                    provider_errors[timeframe] = str(exc)[:300]
 
-    history_archive = {}
-    try:
-        daily_history = get_daily_history()
-        history_archive["daily"] = archive_daily_history(daily_history)
-    except Exception as exc:
-        history_archive["daily"] = {"status": "error", "message": str(exc)[:250]}
+        history_archive = {}
+        try:
+            daily_history = get_daily_history()
+            history_archive["daily"] = archive_daily_history(daily_history)
+        except Exception as exc:
+            history_archive["daily"] = {"status": "error", "message": str(exc)[:250]}
 
-    try:
-        intraday_history = get_intraday_prices(hours=48)
-        history_archive["intraday"] = archive_intraday_prices(intraday_history)
-    except Exception as exc:
-        history_archive["intraday"] = {"status": "error", "message": str(exc)[:250]}
+        try:
+            intraday_history = get_intraday_prices(hours=48)
+            history_archive["intraday"] = archive_intraday_prices(intraday_history)
+        except Exception as exc:
+            history_archive["intraday"] = {"status": "error", "message": str(exc)[:250]}
+
+        collector_audit = record_collector_run(started_at, archive_results, provider_errors)
+        data_source = "XAUS reference-market feed"
+        response_symbol = "XAUUSD"
 
     analysis = analyse_timeframes(market_data)
     if provider_errors:
@@ -94,30 +121,27 @@ def analyse():
         analysis["analysis_status"] = "data_not_ready"
         analysis["research_signal"] = "WAIT"
         analysis["technical_bias"] = "NEUTRAL"
-        analysis["message"] += " Provider errors: " + error_summary
+        analysis["alignment_score"] = 0
+        analysis["message"] += " Data errors: " + error_summary
 
-    # Audit writes are best-effort and must never interrupt the market response.
-    collector_audit = record_collector_run(started_at, archive_results, provider_errors)
-
-    message = analysis["message"]
-    if analysis["research_signal"] in {"BUY", "SELL"}:
-        message += (
-            " Gold AI still displays WAIT as its trade signal because this is "
-            "a reference-market feed, not your MT5 broker's execution feed."
+    if mt5_source:
+        message = analysis["message"] + (
+            " These are authenticated broker candles, but Gold AI remains research-only; "
+            "demo execution is not connected or enabled."
         )
     else:
-        message += (
-            " The current feed is reference-market data, not your MT5 broker's "
-            "execution feed."
+        message = analysis["message"] + (
+            " The current feed is XAUS reference-market data, not your MT5 broker's "
+            "execution feed. Connect the read-only MT5 bridge for broker-specific analysis."
         )
 
     return {
-        "symbol": "XAUUSD",
+        "symbol": response_symbol,
         "signal": "WAIT",
         "ai_trained": False,
         "execution_ready": False,
         "research_only": True,
-        "data_source": "XAUS reference-market feed",
+        "data_source": data_source,
         "archive_status": archive_results,
         "history_archive": history_archive,
         "collector_audit": collector_audit,
@@ -229,9 +253,24 @@ def market_candles(timeframe: str = "M15"):
         )
 
     try:
+        mt5_source = get_latest_mt5_source()
+        if mt5_source:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], selected_timeframe
+            )
+            if not market["candles"]:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"No verified MT5 {selected_timeframe} candles are archived yet.",
+                )
+            market["archive"] = {"status": "already_archived", "rows_sent": 0}
+            return market
+
         market = get_market_candles(selected_timeframe)
         market["archive"] = archive_market_candles(market)
         return market
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except MarketDataError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
