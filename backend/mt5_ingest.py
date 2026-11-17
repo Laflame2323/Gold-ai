@@ -45,8 +45,9 @@ class MT5Batch(BaseModel):
     @field_validator("broker_server", "symbol")
     @classmethod
     def validate_safe_labels(cls, value):
-        if not re.fullmatch(r"[A-Za-z0-9._-]+", value):
-            raise ValueError("Use only letters, numbers, dots, underscores and hyphens.")
+        value = value.strip()
+        if not value or not re.fullmatch(r"[A-Za-z0-9._# -]+", value):
+            raise ValueError("Use letters, numbers, spaces, dots, underscores, hyphens or #.")
         return value
 
     @field_validator("timeframe")
