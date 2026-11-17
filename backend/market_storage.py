@@ -1,4 +1,4 @@
-""""Persist reference-market candles and collection-run diagnostics in Supabase."""
+"""Persist reference-market candles and collection-run diagnostics in Supabase."""
 from __future__ import annotations
 
 import json
@@ -38,7 +38,7 @@ def record_collector_run(started_at: datetime, archive_results: dict, provider_e
         "finished_at": finished_at.isoformat(),
         "status": "success" if len(saved) == 6 and not failed else ("partial" if saved else "failed"),
         "rows_received": rows_received,
-        "rows_inserted": 0,
+        "rows_inserted": None,
         "timeframes": sorted(saved),
         "error_message": json.dumps(failed, separators=(",", ":")) if failed else None,
         "metadata": {"saved_timeframes": sorted(saved), "failed_timeframes": failed, "provider_errors": provider_errors},
