@@ -350,6 +350,15 @@ async function analyseGold() {
     $("modelStatus").textContent = data.ai_trained
       ? "Model status reported as trained. Always review the data and risk before trading."
       : "This is indicator-based research, not a trained AI model or live trade recommendation.";
+    const regime = data.market_regime || {};
+    $("regimeLabel").textContent = regime.label || "UNCONFIRMED";
+    $("regimeDirection").textContent = regime.direction || "NEUTRAL";
+    $("regimeState").textContent = regime.label === "UNCONFIRMED" ? "DATA INCOMPLETE" : "RESEARCH ONLY";
+    $("regimeExplanation").textContent = regime.explanation || "Regime classification unavailable.";
+    $("regimeHigher").textContent = regime.higher_timeframe_alignment || "—";
+    $("regimeEntry").textContent = regime.entry_timeframe_alignment || "—";
+    $("regimeScore").textContent = Number.isFinite(Number(regime.alignment_score)) ? Number(regime.alignment_score).toFixed(3) : "—";
+    $("regimeRisk").textContent = regime.risk_note || "Research context only; verify broker data.";
     $("entryValue").textContent = data.entry ?? "—";
     $("stopValue").textContent = data.stop_loss ?? "—";
     $("targetValue").textContent = data.take_profit ?? "—";
