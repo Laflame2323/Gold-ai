@@ -39,7 +39,7 @@ class MT5Batch(BaseModel):
     broker_server: str = Field(min_length=1, max_length=100)
     symbol: str = Field(min_length=1, max_length=32)
     timeframe: str
-    server_utc_offset_seconds: int | None = Field(default=None, ge=-50400, le=50400)
+    server_utc_offset_seconds: int = Field(ge=-50400, le=50400)
     candles: list[MT5Candle] = Field(min_length=1, max_length=500)
 
     @field_validator("broker_server", "symbol")
@@ -69,16 +69,19 @@ def normalise_mt5_batch(batch: MT5Batch, now: datetime | None = None) -> list[di
     current = now or datetime.now(timezone.utc)
     now_seconds = int(current.timestamp())
     interval = TIMEFRAME_SECONDS[batch.timeframe]
+    # Convert broker-server wall time to UTC before storage.
+    offset_seconds = batch.server_utc_offset_seconds
     source = f"MT5:{batch.broker_server}"
     received_at = current.astimezone(timezone.utc).isoformat()
     rows = []
     for candle in sorted(batch.candles, key=lambda item: item.time):
-        if candle.time + interval > now_seconds + 5:
+        utc_timestamp = candle.time - offset_seconds
+        if utc_timestamp + interval > now_seconds + 5:
             raise ValueError("Forming or future candles are not accepted.")
         rows.append({
             "symbol": batch.symbol,
             "timeframe": batch.timeframe,
-            "candle_time": datetime.fromtimestamp(candle.time, timezone.utc).isoformat(),
+            "candle_time": datetime.fromtimestamp(utc_timestamp, timezone.utc).isoformat(),
             "open": candle.open,
             "high": candle.high,
             "low": candle.low,
