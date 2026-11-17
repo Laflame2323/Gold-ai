@@ -1,9 +1,33 @@
 import unittest
+from unittest.mock import patch
 
-from market_data import MarketDataError, _aggregate_h4, _normalise_candles
+from market_data import MarketDataError, _aggregate_h4, _normalise_candles, _fetch_json_with_retries
 
 
 class MarketDataTests(unittest.TestCase):
+
+    def test_history_fetch_retries_transient_failure(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return b'{"ok": true}'
+
+        with patch("market_data.urlopen", side_effect=[TimeoutError("temporary"), FakeResponse()]) as fetch:
+            with patch("market_data.time.sleep"):
+                result = _fetch_json_with_retries(object(), "failed", attempts=2)
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(fetch.call_count, 2)
+
+    def test_history_fetch_does_not_hide_repeated_failures(self):
+        with patch("market_data.urlopen", side_effect=TimeoutError("offline")) as fetch:
+            with patch("market_data.time.sleep"):
+                with self.assertRaises(MarketDataError):
+                    _fetch_json_with_retries(object(), "provider unavailable", attempts=3)
+        self.assertEqual(fetch.call_count, 3)
+
     def test_normalise_sorts_and_deduplicates(self):
         rows = [
             {"t": 120, "o": 2, "h": 3, "l": 1, "c": 2.5},
