@@ -27,13 +27,29 @@ class MarketDataTests(unittest.TestCase):
             }
             for index in range(4)
         ]
-        result = _aggregate_h4(rows)
+        result = _aggregate_h4(rows, now=start + 14_400)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["open"], 100)
         self.assertEqual(result[0]["close"], 104)
         self.assertEqual(result[0]["high"], 105)
         self.assertEqual(result[0]["low"], 99)
         self.assertEqual(result[0]["volume"], 40)
+
+    def test_h4_skips_still_forming_group(self):
+        start = (1_800_000_000 // 14_400) * 14_400
+        rows = [
+            {
+                "time": start + index * 3600,
+                "open": 100,
+                "high": 101,
+                "low": 99,
+                "close": 100,
+                "volume": None,
+            }
+            for index in range(4)
+        ]
+        with self.assertRaises(MarketDataError):
+            _aggregate_h4(rows, now=start + 3 * 3600 + 1800)
 
     def test_h4_skips_incomplete_group(self):
         start = (1_800_000_000 // 14_400) * 14_400
