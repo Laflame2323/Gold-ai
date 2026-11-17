@@ -1,6 +1,10 @@
 name: Gold AI weekly CFTC positioning archive
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cot-positioning.yml"
   schedule:
     - cron: "0 22 * * 5"
   workflow_dispatch:
