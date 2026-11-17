@@ -32,6 +32,24 @@ class MarketDataError(Exception):
     """Raised when the upstream market data cannot be trusted or parsed."""
 
 
+def _fetch_json_with_retries(request, error_message, attempts=3, timeout=20):
+    """Retry transient upstream failures; never turn a failed response into data."""
+    last_error = None
+    for attempt in range(max(1, attempts)):
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code not in (408, 425, 429, 500, 502, 503, 504):
+                break
+        except (URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            last_error = exc
+        if attempt + 1 < max(1, attempts):
+            time.sleep(min(2 ** attempt, 3))
+    raise MarketDataError(error_message) from last_error
+
+
 def _timestamp_seconds(value):
     if isinstance(value, bool):
         raise ValueError("Invalid candle timestamp")
@@ -256,11 +274,9 @@ def get_daily_history():
         "https://xaus.com/api/v1/history",
         headers={"Accept": "application/json", "User-Agent": "GoldAI/1.0"},
     )
-    try:
-        with urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise MarketDataError("Could not retrieve XAUS daily gold history.") from exc
+    payload = _fetch_json_with_retries(
+        request, "Could not retrieve XAUS daily gold history.", attempts=3, timeout=20
+    )
     points = payload.get("points") if isinstance(payload, dict) else None
     if not isinstance(points, list):
         raise MarketDataError("XAUS daily history returned an unexpected format.")
@@ -306,11 +322,9 @@ def get_intraday_prices(hours=48):
         f"https://xaus.com/api/v1/intraday?{query}",
         headers={"Accept": "application/json", "User-Agent": "GoldAI/1.0"},
     )
-    try:
-        with urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise MarketDataError("Could not retrieve XAUS intraday gold history.") from exc
+    payload = _fetch_json_with_retries(
+        request, "Could not retrieve XAUS intraday gold history.", attempts=3, timeout=20
+    )
     points = payload.get("points") if isinstance(payload, dict) else None
     if not isinstance(points, list):
         raise MarketDataError("XAUS intraday history returned an unexpected format.")
