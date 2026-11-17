@@ -157,6 +157,16 @@ def assistant(payload: AssistantRequest):
         )
     }
     # Gold AI assistant endpoint update
+    @app.get("/debug/build")
+def debug_build():
+    return {
+        "build": "GOLD-AI-DEBUG-130",
+        "version": app.version,
+        "file": __file__,
+        "routes": [
+            route.path for route in app.routes
+        ]
+    }
 
 
 
