@@ -76,6 +76,7 @@ class MT5IngestionTests(unittest.TestCase):
     def test_invalid_ingestion_token_is_rejected(self):
         batch = MT5Batch.model_validate({
             "broker_server": "Broker-MT5", "symbol": "XAUUSD", "timeframe": "M1",
+            "server_utc_offset_seconds": 0,
             "candles": [{"time": 1767225540, "open": 1, "high": 2, "low": 1, "close": 2}]
         })
         with patch.dict(os.environ, {"MT5_INGEST_TOKEN": "expected-secret"}):
