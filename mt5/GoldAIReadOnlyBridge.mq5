@@ -29,11 +29,11 @@ string SafeLabel(const string value)
    return result;
 }
 
-string CandleJson(const MqlRates &bar, const int digits)
+string CandleJson(const MqlRates &bar, const int digits, const int serverOffsetSeconds)
 {
    return StringFormat(
       "{\"time\":%I64d,\"open\":%s,\"high\":%s,\"low\":%s,\"close\":%s,\"tick_volume\":%I64u,\"real_volume\":%I64u,\"spread_points\":%d}",
-      (long)bar.time,
+      (long)bar.time - serverOffsetSeconds,
       DoubleToString(bar.open, digits),
       DoubleToString(bar.high, digits),
       DoubleToString(bar.low, digits),
@@ -52,6 +52,11 @@ bool SendBatch(const int index, MqlRates &rates[])
    if(server == "" || symbol == "") return false;
 
    int digits = (int)SymbolInfoInteger(GoldSymbol, SYMBOL_DIGITS);
+   datetime serverNow = TimeTradeServer();
+   datetime utcNow = TimeGMT();
+   if(serverNow <= 0 || utcNow <= 0) return false;
+   int serverOffsetSeconds = (int)(serverNow - utcNow);
+   if(MathAbs(serverOffsetSeconds) > 14 * 3600) return false;
    string body = "{\"broker_server\":\"" + server +
                  "\",\"symbol\":\"" + symbol +
                  "\",\"timeframe\":\"" + FrameNames[index] +
@@ -59,7 +64,7 @@ bool SendBatch(const int index, MqlRates &rates[])
    for(int i = 0; i < count; i++)
    {
       if(i > 0) body += ",";
-      body += CandleJson(rates[i], digits);
+      body += CandleJson(rates[i], digits, serverOffsetSeconds);
    }
    body += "]}";
 
