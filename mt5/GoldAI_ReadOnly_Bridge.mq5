@@ -8,13 +8,16 @@
 
 input string IngestURL = "https://gold-ai-backend-p9el.onrender.com/broker/mt5/candles";
 input string IngestToken = "";
-input int    BarsToSend = 100;
+input int    BarsToSend = 5000;
+input int    LiveBarsToSend = 100;
 input int    TimerSeconds = 10;
-input int    RequestTimeoutMs = 15000;
+input int    RequestTimeoutMs = 60000;
 
 ENUM_TIMEFRAMES Frames[6] = { PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4 };
 string FrameNames[6] = { "M1", "M5", "M15", "M30", "H1", "H4" };
 datetime LastSentBar[6];
+bool HistoryLoaded[6];
+int NextFrameIndex = 0;
 
 string JsonEscape(const string value)
 {
@@ -34,7 +37,8 @@ bool SendFrame(const int index)
 
    MqlRates rates[];
    ArraySetAsSeries(rates, false);
-   int requested = MathMax(60, MathMin(BarsToSend, 300));
+   bool initialHistory = !HistoryLoaded[index];
+   int requested = MathMax(60, MathMin(initialHistory ? BarsToSend : LiveBarsToSend, 5000));
    int copied = CopyRates(_Symbol, Frames[index], 1, requested, rates);
    if(copied < 60)
    {
@@ -97,8 +101,10 @@ bool SendFrame(const int index)
    }
 
    LastSentBar[index] = newestClosed;
-   Print("Gold AI: uploaded ", copied, " completed ", FrameNames[index],
-         " candles for ", symbol, " from ", broker, ".");
+   HistoryLoaded[index] = true;
+   Print("Gold AI: uploaded ", copied,
+         initialHistory ? " historical " : " recent completed ",
+         FrameNames[index], " candles for ", symbol, " from ", broker, ".");
    return true;
 }
 
@@ -120,6 +126,9 @@ void OnDeinit(const int reason)
 
 void OnTimer()
 {
-   for(int i = 0; i < ArraySize(Frames); i++)
-      SendFrame(i);
+   // Process one timeframe per timer tick so the initial history backfill
+   // does not block the terminal with six large uploads at once.
+   int index = NextFrameIndex;
+   SendFrame(index);
+   NextFrameIndex = (NextFrameIndex + 1) % ArraySize(Frames);
 }
