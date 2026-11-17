@@ -120,3 +120,95 @@ def archive_market_candles(market_data: dict) -> dict:
     except (URLError, TimeoutError, OSError) as exc:
         logging.exception("CANDLE_ARCHIVE network failure")
         return {"status": "error", "rows_sent": len(rows), "message": str(exc)[:300]}
+
+
+
+def _archive_reference_rows(table, rows, conflict_columns):
+    base_url, api_key = _supabase_credentials()
+    if not base_url or not api_key:
+        return {"status": "not_configured", "rows_sent": 0}
+    if not rows:
+        return {"status": "no_valid_rows", "rows_sent": 0}
+    query = urlencode({"on_conflict": conflict_columns})
+    request = Request(
+        f"{base_url}/rest/v1/{table}?{query}",
+        data=json.dumps(rows, allow_nan=False).encode("utf-8"),
+        headers={
+            "apikey": api_key,
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=minimal",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            return {"status": "saved", "rows_sent": len(rows), "http_status": response.status}
+    except HTTPError as exc:
+        detail = exc.read(1000).decode("utf-8", errors="replace")
+        logging.error("REFERENCE_ARCHIVE %s HTTP %s: %s", table, exc.code, detail[:800])
+        return {"status": "error", "rows_sent": len(rows), "http_status": exc.code, "message": detail[:800]}
+    except (URLError, TimeoutError, OSError) as exc:
+        logging.warning("REFERENCE_ARCHIVE %s network failure: %s", table, str(exc)[:250])
+        return {"status": "error", "rows_sent": len(rows), "message": str(exc)[:250]}
+
+
+def archive_daily_history(history: dict) -> dict:
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    data_state = history.get("data_state") or {}
+    rows = []
+    for point in history.get("points") or []:
+        try:
+            rows.append({
+                "symbol": history.get("symbol", "XAUUSD"),
+                "session_date": point["date"],
+                "close": point["close"],
+                "high": point.get("high"),
+                "low": point.get("low"),
+                "source": "XAUS daily history API",
+                "fetched_at": fetched_at,
+                "data_state": data_state.get("status"),
+                "raw_metadata": {
+                    "as_of": data_state.get("as_of"),
+                    "source": data_state.get("source"),
+                    "age_seconds": data_state.get("age_seconds"),
+                    "high_52w": history.get("high_52w"),
+                    "low_52w": history.get("low_52w"),
+                    "return_1y_pct": history.get("return_1y_pct"),
+                    "return_ytd_pct": history.get("return_ytd_pct"),
+                },
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    return _archive_reference_rows(
+        "market_history_daily", rows, "symbol,session_date,source"
+    )
+
+
+def archive_intraday_prices(history: dict) -> dict:
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    data_state = history.get("data_state") or {}
+    rows = []
+    for point in history.get("points") or []:
+        try:
+            rows.append({
+                "symbol": history.get("symbol", "XAUUSD"),
+                "observed_at": datetime.fromtimestamp(
+                    int(point["time"]), timezone.utc
+                ).isoformat(),
+                "price": point["price"],
+                "source": "XAUS intraday API",
+                "fetched_at": fetched_at,
+                "data_state": data_state.get("status"),
+                "raw_metadata": {
+                    "as_of": data_state.get("as_of"),
+                    "source": data_state.get("source"),
+                    "age_seconds": data_state.get("age_seconds"),
+                    "coverage_seconds": history.get("coverage_seconds"),
+                },
+            })
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    return _archive_reference_rows(
+        "market_intraday_prices", rows, "symbol,observed_at,source"
+    )
