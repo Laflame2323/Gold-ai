@@ -1,0 +1,58 @@
+name: Gold AI weekly CFTC positioning archive
+
+on:
+  schedule:
+    - cron: "0 22 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gold-ai-cftc-positioning
+  cancel-in-progress: false
+
+jobs:
+  archive-cot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Fetch and archive official gold positioning
+        env:
+          GOLD_AI_API_URL: https://gold-ai-backend-p9el.onrender.com
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          url = os.environ["GOLD_AI_API_URL"].rstrip("/") + "/research/cot"
+          request = urllib.request.Request(
+              url,
+              headers={"Accept": "application/json", "User-Agent": "GoldAI-CFTC-Archive/1.0"},
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=90) as response:
+                  payload = json.loads(response.read().decode("utf-8"))
+                  print("Backend HTTP:", response.status)
+          except Exception as exc:
+              print("CFTC archive request failed:", repr(exc))
+              sys.exit(1)
+
+          latest = payload.get("latest") or {}
+          archive = payload.get("archive") or {}
+          summary = {
+              "source": payload.get("source"),
+              "dataset": payload.get("source_dataset"),
+              "records": payload.get("count", 0),
+              "position_as_of": payload.get("position_as_of"),
+              "expected_release_date": payload.get("expected_release_date"),
+              "managed_money_net": latest.get("managed_money_net"),
+              "archive_status": archive.get("status"),
+              "rows_sent": archive.get("rows_sent", 0),
+          }
+          print(json.dumps(summary, indent=2))
+          if not summary["records"] or archive.get("status") != "saved":
+              sys.exit(1)
+          PY
