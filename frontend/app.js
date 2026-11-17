@@ -97,6 +97,8 @@ function formatPrice(value) {
 }
 
 async function loadGoldPrice() {
+  if (spotRequestInFlight) return;
+  spotRequestInFlight = true;
   try {
     const response = await fetch(API_URL + "/market/spot", { cache: "no-store" });
     if (!response.ok) throw new Error("Price endpoint returned " + response.status);
@@ -106,15 +108,29 @@ async function loadGoldPrice() {
     $("goldPrice").textContent = "$" + formatPrice(data.price);
     const receivedAt = new Date();
     $("priceUpdated").textContent = "Price received at " + receivedAt.toLocaleTimeString();
+    const changed = lastSpotPrice !== null && Number(lastSpotPrice) !== Number(data.price);
+    lastSpotPrice = data.price;
+    $("monitorSpotState").textContent = "LIVE · $" + formatPrice(data.price);
+    $("monitorSpotTime").textContent = "Checked " + receivedAt.toLocaleTimeString() + (changed ? " · price changed" : "");
+    $("monitorMessage").textContent = "Spot feed reachable. Price updates are checked every 15 seconds; provider timestamps remain authoritative.";
+    updateMonitorState();
     setApiStatus("Connected", true);
   } catch (error) {
     $("goldPrice").textContent = "Unavailable";
     $("priceUpdated").textContent = "Could not retrieve the spot price";
+    $("monitorSpotState").textContent = "OFFLINE";
+    $("monitorSpotTime").textContent = "Last check failed";
+    $("monitorMessage").textContent = "Spot feed request failed. Waiting for the next automatic check.";
+    updateMonitorState();
     setApiStatus("Offline", false);
+  } finally {
+    spotRequestInFlight = false;
   }
 }
 
 async function loadCandles(timeframe = selectedTimeframe) {
+  if (candleRequestInFlight) return;
+  candleRequestInFlight = true;
   selectedTimeframe = timeframe;
   $("selectedTimeframe").textContent = timeframe;
   $("chartLoading").classList.remove("hidden");
@@ -171,6 +187,16 @@ async function loadCandles(timeframe = selectedTimeframe) {
       : "Last bar time unavailable";
 
     const recent = data.data_status === "recent";
+    const checkedAt = new Date();
+    const candleStamp = data.last_candle_at ? new Date(data.last_candle_at) : null;
+    const candleChanged = candleStamp && lastCandleStamp && candleStamp.getTime() !== lastCandleStamp.getTime();
+    if (candleStamp) lastCandleStamp = candleStamp;
+    $("monitorCandleState").textContent = recent ? "RECENT" : "STALE";
+    $("monitorCandleTime").textContent = "Checked " + checkedAt.toLocaleTimeString() + (candleChanged ? " · new closed bar" : " · no new closed bar");
+    $("monitorLastBar").textContent = candleStamp ? candleStamp.toLocaleTimeString() : "—";
+    $("monitorBarAge").textContent = Number.isFinite(Number(data.age_seconds)) ? Math.floor(Number(data.age_seconds)) + " seconds old" : "Age unavailable";
+    $("monitorMessage").textContent = recent ? "Candle feed is within its freshness limit. The monitor will continue checking for new completed bars." : "Candle feed is stale. Gold AI will show this warning and will not treat old candles as live conditions.";
+    updateMonitorState();
     $("feedStatus").textContent = recent ? "Recent" : "Stale";
     $("feedStatus").className = "status-text " + (recent ? "ok" : "bad");
     setChartStatus(recent ? "Recent data" : "Stale data", recent ? "connected" : "stale");
@@ -183,8 +209,25 @@ async function loadCandles(timeframe = selectedTimeframe) {
     $("lastCandleTime").textContent = "—";
     $("feedStatus").textContent = "Unavailable";
     $("feedStatus").className = "status-text bad";
+    $("monitorCandleState").textContent = "UNAVAILABLE";
+    $("monitorCandleTime").textContent = "Last check failed";
+    $("monitorMessage").textContent = "Candle request failed. The monitor will retry automatically.";
+    updateMonitorState();
     setChartStatus("Feed unavailable", "error");
+  } finally {
+    candleRequestInFlight = false;
   }
+}
+
+function updateMonitorState() {
+  const spotText = $("monitorSpotState").textContent;
+  const spotOk = spotText !== "OFFLINE" && spotText !== "Checking";
+  const candleText = $("monitorCandleState").textContent;
+  const candleOk = candleText === "RECENT";
+  const state = $("monitorState");
+  if (!state) return;
+  state.className = "monitor-pill " + (spotOk && candleOk ? "online" : spotOk || candleText === "STALE" ? "warning" : "offline");
+  state.innerHTML = "<i></i>" + (spotOk && candleOk ? "FEEDS HEALTHY" : spotOk ? "CHECK FEED" : "CONNECTING / OFFLINE");
 }
 
 async function analyseGold() {
@@ -288,5 +331,11 @@ $("chatForm").addEventListener("submit", sendAssistantMessage);
 
 loadGoldPrice();
 loadCandles("M15");
-setInterval(loadGoldPrice, 60000);
-setInterval(() => loadCandles(selectedTimeframe), 120000);
+setInterval(loadGoldPrice, 15000);
+setInterval(() => loadCandles(selectedTimeframe), 60000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    loadGoldPrice();
+    loadCandles(selectedTimeframe);
+  }
+});
