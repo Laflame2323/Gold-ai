@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import hashlib
+import threading
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -14,6 +16,18 @@ def _supabase_credentials():
     base_url = os.getenv("SUPABASE_URL", "").rstrip("/")
     api_key = os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
     return base_url, api_key
+
+# Avoid repeatedly upserting an unchanged closed-candle window on dashboard polls.
+# Update the signature only after Supabase confirms a successful write.
+_candle_archive_cache = {}
+_candle_archive_lock = threading.Lock()
+
+
+def _candle_window_signature(candles):
+    fields = ("time", "open", "high", "low", "close", "volume")
+    stable_rows = [{field: candle.get(field) for field in fields} for candle in candles]
+    encoded = json.dumps(stable_rows, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def record_collector_run(started_at: datetime, archive_results: dict, provider_errors: dict) -> dict:
@@ -103,6 +117,17 @@ def archive_market_candles(market_data: dict) -> dict:
     if not rows:
         return {"status": "no_valid_rows", "rows_sent": 0}
 
+    cache_key = (base_url, symbol, timeframe, source)
+    signature = _candle_window_signature(candles)
+    with _candle_archive_lock:
+        if _candle_archive_cache.get(cache_key) == signature:
+            return {
+                "status": "saved",
+                "rows_sent": 0,
+                "deduplicated": True,
+                "http_status": 200,
+            }
+
     query = urlencode({"on_conflict": "symbol,timeframe,candle_time,source"})
     request = Request(
         f"{base_url}/rest/v1/market_candles?{query}",
@@ -112,6 +137,8 @@ def archive_market_candles(market_data: dict) -> dict:
     )
     try:
         with urlopen(request, timeout=20) as response:
+            with _candle_archive_lock:
+                _candle_archive_cache[cache_key] = signature
             return {"status": "saved", "rows_sent": len(rows), "http_status": response.status}
     except HTTPError as exc:
         detail = exc.read(500).decode("utf-8", errors="replace")
