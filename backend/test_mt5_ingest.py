@@ -33,6 +33,20 @@ class MT5IngestionTests(unittest.TestCase):
         self.assertEqual(rows[0]["raw_metadata"]["spread_points"], 25)
         self.assertEqual(rows[0]["raw_metadata"]["server_utc_offset_seconds"], 7200)
 
+    def test_common_broker_names_and_gold_suffixes_are_accepted(self):
+        batch = MT5Batch.model_validate({
+            "broker_server": "Broker MT5 Demo",
+            "symbol": "XAUUSD#",
+            "timeframe": "M1",
+            "server_utc_offset_seconds": 0,
+            "candles": [{
+                "time": 1767225540,
+                "open": 1, "high": 2, "low": 1, "close": 2
+            }]
+        })
+        self.assertEqual(batch.broker_server, "Broker MT5 Demo")
+        self.assertEqual(batch.symbol, "XAUUSD#")
+
     def test_invalid_ohlc_is_rejected(self):
         with self.assertRaises(ValidationError):
             MT5Batch.model_validate({
