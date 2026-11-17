@@ -289,3 +289,14 @@ a { color: inherit; text-decoration: none; }
 .cot-history-bar.positive{background:var(--green)}
 .cot-history-bar.negative{background:var(--red)}
 @media(max-width:520px){.cot-groups{gap:6px}.cot-groups>div{padding:8px 6px}.cot-groups span{font-size:6px}.cot-groups strong{font-size:8px}.cot-history{gap:4px}}
+
+
+/* Cross-asset FRED macro context panel */
+.macro-panel{margin-top:17px;padding:19px}
+.macro-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:16px}
+.macro-stat{display:flex;flex-direction:column;gap:7px;min-width:0;padding:12px 9px;border:1px solid #28364b;border-radius:7px;background:#0e1725}
+.macro-stat span{color:#8290a5;font:7px var(--mono);letter-spacing:.35px;line-height:1.5}
+.macro-stat strong{color:#e8edf5;font:500 17px var(--mono);overflow-wrap:anywhere}
+.macro-stat small{color:#8290a5;font:8px var(--mono)}
+.macro-note{margin:13px 0 0;color:#a38a5b;font-size:9px;line-height:1.6}
+@media(max-width:600px){.macro-panel{padding:15px}.macro-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.macro-stat{padding:10px 8px}.macro-stat strong{font-size:15px}}
