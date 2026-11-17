@@ -59,6 +59,18 @@ def normalise_cot_rows(raw_rows):
             if record["managed_money_long"] is None or record["managed_money_short"] is None:
                 continue
             record["managed_money_net"] = record["managed_money_long"] - record["managed_money_short"]
+            record["producer_merchant_net"] = (
+                record["producer_merchant_long"] - record["producer_merchant_short"]
+                if record["producer_merchant_long"] is not None and record["producer_merchant_short"] is not None else None
+            )
+            record["swap_dealer_net"] = (
+                record["swap_dealer_long"] - record["swap_dealer_short"]
+                if record["swap_dealer_long"] is not None and record["swap_dealer_short"] is not None else None
+            )
+            record["other_reportable_net"] = (
+                record["other_reportable_long"] - record["other_reportable_short"]
+                if record["other_reportable_long"] is not None and record["other_reportable_short"] is not None else None
+            )
             record["managed_money_net_pct_oi"] = record["managed_money_net"] / record["open_interest"] * 100
             # Tuesday positions are normally published Friday; holiday delays can occur.
             record["expected_release_date"] = (report_date + timedelta(days=3)).isoformat()
