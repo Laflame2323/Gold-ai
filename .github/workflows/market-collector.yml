@@ -1,0 +1,66 @@
+name: Gold AI market data collector
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gold-ai-market-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Collect and archive all gold timeframes
+        env:
+          GOLD_AI_API_URL: https://gold-ai-backend-p9el.onrender.com
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+          import urllib.error
+
+          url = os.environ["GOLD_AI_API_URL"].rstrip("/") + "/analyse"
+          request = urllib.request.Request(
+              url,
+              headers={"Accept": "application/json", "User-Agent": "GoldAI-GitHubCollector/1.0"},
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=150) as response:
+                  payload = json.loads(response.read().decode("utf-8"))
+                  print("Backend HTTP:", response.status)
+          except Exception as exc:
+              print("Collector request failed:", repr(exc))
+              sys.exit(1)
+
+          required = {"M1", "M5", "M15", "M30", "H1", "H4"}
+          archives = payload.get("archive_status") or {}
+          saved = sorted(
+              tf for tf, result in archives.items()
+              if result.get("status") == "saved"
+          )
+          failed = {
+              tf: result.get("status", "missing")
+              for tf, result in archives.items()
+              if result.get("status") != "saved"
+          }
+          missing = sorted(required - set(archives))
+          print(json.dumps({
+              "symbol": payload.get("symbol", "XAUUSD"),
+              "saved_timeframes": saved,
+              "failed_timeframes": failed,
+              "missing_timeframes": missing,
+              "ai_trained": payload.get("ai_trained", False),
+              "research_only": payload.get("research_only", True),
+          }, indent=2))
+          if failed or missing:
+              sys.exit(1)
+          PY
