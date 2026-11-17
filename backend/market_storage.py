@@ -55,6 +55,8 @@ def get_latest_mt5_source():
     query = urlencode({
         "select": "symbol,source,fetched_at",
         "source": "like.MT5:*",
+        "is_closed": "eq.true",
+        "quality_status": "eq.verified",
         "order": "fetched_at.desc",
         "limit": "1",
     })
