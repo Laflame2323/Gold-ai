@@ -212,3 +212,40 @@ def archive_intraday_prices(history: dict) -> dict:
     return _archive_reference_rows(
         "market_intraday_prices", rows, "symbol,observed_at,source"
     )
+
+
+def archive_gold_cot(cot_payload: dict) -> dict:
+    """Upsert official weekly gold positioning snapshots into Supabase."""
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for item in cot_payload.get("history") or []:
+        try:
+            rows.append({
+                "contract_code": item["contract_code"],
+                "report_date": item["report_date"],
+                "market_name": item.get("market_name"),
+                "open_interest": item.get("open_interest"),
+                "managed_money_long": item.get("managed_money_long"),
+                "managed_money_short": item.get("managed_money_short"),
+                "managed_money_spread": item.get("managed_money_spread"),
+                "producer_merchant_long": item.get("producer_merchant_long"),
+                "producer_merchant_short": item.get("producer_merchant_short"),
+                "swap_dealer_long": item.get("swap_dealer_long"),
+                "swap_dealer_short": item.get("swap_dealer_short"),
+                "other_reportable_long": item.get("other_reportable_long"),
+                "other_reportable_short": item.get("other_reportable_short"),
+                "source": item.get("source") or "CFTC Disaggregated Futures Only",
+                "fetched_at": fetched_at,
+                "raw_metadata": {
+                    "managed_money_net": item.get("managed_money_net"),
+                    "managed_money_net_pct_oi": item.get("managed_money_net_pct_oi"),
+                    "managed_money_net_change": item.get("managed_money_net_change"),
+                    "expected_release_date": item.get("expected_release_date"),
+                    "source_dataset": cot_payload.get("source_dataset"),
+                },
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    return _archive_reference_rows(
+        "cot_gold_positions", rows, "contract_code,report_date,source"
+    )
