@@ -52,9 +52,13 @@ def record_collector_run(started_at: datetime, archive_results: dict, provider_e
     try:
         with urlopen(request, timeout=12) as response:
             return {"status": "saved", "http_status": response.status}
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        logging.warning("COLLECTOR_RUN_AUDIT failed: %s", str(exc)[:250])
-        return {"status": "error"}
+    except HTTPError as exc:
+        detail = exc.read(1000).decode("utf-8", errors="replace")
+        logging.warning("COLLECTOR_RUN_AUDIT HTTP %s: %s", exc.code, detail[:800])
+        return {"status": "error", "http_status": exc.code, "message": detail[:800]}
+    except (URLError, TimeoutError, OSError) as exc:
+        logging.warning("COLLECTOR_RUN_AUDIT network failure: %s", str(exc)[:250])
+        return {"status": "error", "message": str(exc)[:250]}
 
 
 def archive_market_candles(market_data: dict) -> dict:
