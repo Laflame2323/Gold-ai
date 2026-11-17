@@ -20,6 +20,7 @@ Gold AI is a research-first XAUUSD market-monitoring application. It collects re
 - FRED macro context and official CFTC gold positioning context.
 - Collector-run audit records.
 - Authenticated, read-only MT5 candle ingestion with broker timestamp conversion.
+- When verified MT5 data exists, the analysis and chart endpoints select that one broker/symbol feed and never mix it with XAUS reference candles.
 - MT5 Expert Advisor source in mt5/GoldAI_ReadOnly_Bridge.mq5.
 
 ## Backend setup
@@ -49,7 +50,7 @@ Do not publish, commit, screenshot, or paste secret values into chat.
 
 Read the MT5 bridge setup guide at mt5/README.md. MT5 Expert Advisors require a desktop MT5 terminal or MT5 VPS; the mobile app cannot run the bridge. The bridge uploads completed candles only and does not place orders.
 
-The broker UTC offset is required. The backend converts broker-server candle times to UTC before archiving. Historical daylight-saving offset changes are not automatically reconstructed, so older bars crossing a broker DST transition require special review.
+The broker UTC offset is required. The backend converts broker-server candle times to UTC before archiving. Historical daylight-saving offset changes are not automatically reconstructed, so older bars crossing a broker DST transition require special review. Until verified broker candles are uploaded, Gold AI continues to use the XAUS reference feed and labels it as such.
 
 ## Research and trading status
 
