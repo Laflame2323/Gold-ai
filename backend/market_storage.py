@@ -240,6 +240,7 @@ def archive_gold_cot(cot_payload: dict) -> dict:
                     "managed_money_net": item.get("managed_money_net"),
                     "managed_money_net_pct_oi": item.get("managed_money_net_pct_oi"),
                     "managed_money_net_change": item.get("managed_money_net_change"),
+                    "managed_money_net_percentile_3y": item.get("managed_money_net_percentile_3y"),
                     "expected_release_date": item.get("expected_release_date"),
                     "source_dataset": cot_payload.get("source_dataset"),
                 },
