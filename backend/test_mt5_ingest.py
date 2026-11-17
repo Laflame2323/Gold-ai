@@ -27,6 +27,7 @@ class MT5IngestionTests(unittest.TestCase):
         })
         rows = normalise_mt5_batch(batch, self.now)
         self.assertEqual(rows[0]["source"], "MT5:Broker-MT5Live01")
+        self.assertEqual(rows[0]["candle_time"], "2025-12-31T21:55:00+00:00")
         self.assertEqual(rows[0]["quality_status"], "verified")
         self.assertTrue(rows[0]["is_closed"])
         self.assertEqual(rows[0]["raw_metadata"]["spread_points"], 25)
@@ -50,6 +51,7 @@ class MT5IngestionTests(unittest.TestCase):
             "broker_server": "Broker-MT5",
             "symbol": "XAUUSD",
             "timeframe": "M5",
+            "server_utc_offset_seconds": 0,
             "candles": [{
                 "time": 1767225540,
                 "open": 4300, "high": 4302,
@@ -63,6 +65,7 @@ class MT5IngestionTests(unittest.TestCase):
     def test_ingestion_is_locked_when_token_is_not_configured(self):
         batch = MT5Batch.model_validate({
             "broker_server": "Broker-MT5", "symbol": "XAUUSD", "timeframe": "M1",
+            "server_utc_offset_seconds": 0,
             "candles": [{"time": 1767225540, "open": 1, "high": 2, "low": 1, "close": 2}]
         })
         with patch.dict(os.environ, {"MT5_INGEST_TOKEN": ""}):
@@ -79,6 +82,13 @@ class MT5IngestionTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as error:
                 ingest_mt5_candles(batch, "wrong-secret")
         self.assertEqual(error.exception.status_code, 401)
+
+    def test_broker_utc_offset_is_required(self):
+        with self.assertRaises(ValidationError):
+            MT5Batch.model_validate({
+                "broker_server": "Broker-MT5", "symbol": "XAUUSD", "timeframe": "M1",
+                "candles": [{"time": 1767225540, "open": 1, "high": 2, "low": 1, "close": 2}]
+            })
 
     def test_unsupported_timeframe_is_rejected(self):
         with self.assertRaises(ValidationError):
