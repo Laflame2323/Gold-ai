@@ -6,6 +6,7 @@ No database writes occur until SUPABASE_URL and SUPABASE_SECRET_KEY
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
@@ -21,6 +22,7 @@ def archive_market_candles(market_data: dict) -> dict:
         or ""
     )
     if not base_url or not api_key:
+        logging.warning("CANDLE_ARCHIVE not_configured: SUPABASE_URL or secret key missing")
         return {"status": "not_configured", "rows_sent": 0}
 
     candles = market_data.get("candles") or []
@@ -86,6 +88,7 @@ def archive_market_candles(market_data: dict) -> dict:
             }
     except HTTPError as exc:
         detail = exc.read(500).decode("utf-8", errors="replace")
+        logging.error("CANDLE_ARCHIVE HTTP %s: %s", exc.code, detail)
         return {
             "status": "error",
             "rows_sent": len(rows),
@@ -93,6 +96,7 @@ def archive_market_candles(market_data: dict) -> dict:
             "message": detail,
         }
     except (URLError, TimeoutError, OSError) as exc:
+        logging.exception("CANDLE_ARCHIVE network failure")
         return {
             "status": "error",
             "rows_sent": len(rows),
