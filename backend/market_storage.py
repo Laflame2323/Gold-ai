@@ -1,8 +1,4 @@
-"""Persist reference-market candles in Supabase using a server-side secret key.
-
-No database writes occur until SUPABASE_URL and SUPABASE_SECRET_KEY
-(or the legacy SUPABASE_SERVICE_ROLE_KEY) are configured on the backend.
-"""
+""""Persist reference-market candles and collection-run diagnostics in Supabase."""
 from __future__ import annotations
 
 import json
@@ -14,15 +10,57 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
-def archive_market_candles(market_data: dict) -> dict:
+def _supabase_credentials():
     base_url = os.getenv("SUPABASE_URL", "").rstrip("/")
-    api_key = (
-        os.getenv("SUPABASE_SECRET_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or ""
-    )
+    api_key = os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or ""
+    return base_url, api_key
+
+
+def record_collector_run(started_at: datetime, archive_results: dict, provider_errors: dict) -> dict:
+    """Write one compact audit record; diagnostics must never break market analysis."""
+    base_url, api_key = _supabase_credentials()
     if not base_url or not api_key:
-        logging.warning("CANDLE_ARCHIVE not_configured: SUPABASE_URL or secret key missing")
+        return {"status": "not_configured"}
+
+    saved = [tf for tf, result in archive_results.items() if result.get("status") == "saved"]
+    failed = {
+        tf: result.get("status", "unknown")
+        for tf, result in archive_results.items()
+        if result.get("status") != "saved"
+    }
+    failed.update({tf: "provider_error" for tf in provider_errors})
+    rows_received = sum(int(result.get("rows_sent", 0) or 0) for result in archive_results.values())
+    finished_at = datetime.now(timezone.utc)
+    row = {
+        "source": "XAUS chart API",
+        "symbol": "XAUUSD",
+        "started_at": started_at.astimezone(timezone.utc).isoformat(),
+        "finished_at": finished_at.isoformat(),
+        "status": "success" if len(saved) == 6 and not failed else ("partial" if saved else "failed"),
+        "rows_received": rows_received,
+        "rows_inserted": 0,
+        "timeframes": sorted(saved),
+        "error_message": json.dumps(failed, separators=(",", ":")) if failed else None,
+        "metadata": {"saved_timeframes": sorted(saved), "failed_timeframes": failed, "provider_errors": provider_errors},
+    }
+    request = Request(
+        f"{base_url}/rest/v1/collector_runs",
+        data=json.dumps(row, allow_nan=False).encode("utf-8"),
+        headers={"apikey": api_key, "Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Prefer": "return=minimal"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=12) as response:
+            return {"status": "saved", "http_status": response.status}
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        logging.warning("COLLECTOR_RUN_AUDIT failed: %s", str(exc)[:250])
+        return {"status": "error"}
+
+
+def archive_market_candles(market_data: dict) -> dict:
+    base_url, api_key = _supabase_credentials()
+    if not base_url or not api_key:
+        logging.warning("CANDLE_ARCHIVE not_configured: Supabase URL or secret key missing")
         return {"status": "not_configured", "rows_sent": 0}
 
     candles = market_data.get("candles") or []
@@ -33,7 +71,7 @@ def archive_market_candles(market_data: dict) -> dict:
     data_status = market_data.get("data_status")
     quality_status = "stale" if data_status == "stale" else "unverified"
     metadata = {
-        "data_status": market_data.get("data_status"),
+        "data_status": data_status,
         "age_seconds": market_data.get("age_seconds"),
         "provider_interval": market_data.get("provider_interval"),
         "provider_range": market_data.get("provider_range"),
@@ -49,19 +87,11 @@ def archive_market_candles(market_data: dict) -> dict:
             rows.append({
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "candle_time": datetime.fromtimestamp(
-                    int(candle["time"]), timezone.utc
-                ).isoformat(),
-                "open": candle["open"],
-                "high": candle["high"],
-                "low": candle["low"],
-                "close": candle["close"],
-                "volume": candle.get("volume"),
-                "source": source,
-                "fetched_at": fetched_at,
-                "is_closed": True,
-                "quality_status": quality_status,
-                "raw_metadata": metadata,
+                "candle_time": datetime.fromtimestamp(int(candle["time"]), timezone.utc).isoformat(),
+                "open": candle["open"], "high": candle["high"], "low": candle["low"],
+                "close": candle["close"], "volume": candle.get("volume"),
+                "source": source, "fetched_at": fetched_at, "is_closed": True,
+                "quality_status": quality_status, "raw_metadata": metadata,
             })
         except (KeyError, TypeError, ValueError, OverflowError):
             continue
@@ -73,34 +103,16 @@ def archive_market_candles(market_data: dict) -> dict:
     request = Request(
         f"{base_url}/rest/v1/market_candles?{query}",
         data=json.dumps(rows, allow_nan=False).encode("utf-8"),
-        headers={
-            "apikey": api_key,
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates,return=minimal",
-        },
+        headers={"apikey": api_key, "Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"},
         method="POST",
     )
     try:
         with urlopen(request, timeout=20) as response:
-            return {
-                "status": "saved",
-                "rows_sent": len(rows),
-                "http_status": response.status,
-            }
+            return {"status": "saved", "rows_sent": len(rows), "http_status": response.status}
     except HTTPError as exc:
         detail = exc.read(500).decode("utf-8", errors="replace")
         logging.error("CANDLE_ARCHIVE HTTP %s: %s", exc.code, detail)
-        return {
-            "status": "error",
-            "rows_sent": len(rows),
-            "http_status": exc.code,
-            "message": detail,
-        }
+        return {"status": "error", "rows_sent": len(rows), "http_status": exc.code, "message": detail}
     except (URLError, TimeoutError, OSError) as exc:
         logging.exception("CANDLE_ARCHIVE network failure")
-        return {
-            "status": "error",
-            "rows_sent": len(rows),
-            "message": str(exc)[:300],
-        }
+        return {"status": "error", "rows_sent": len(rows), "message": str(exc)[:300]}
