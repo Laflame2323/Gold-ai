@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/cot-positioning.yml"
+      - "backend/cot_data.py"
+      - "backend/main.py"
   schedule:
     - cron: "0 22 * * 5"
   workflow_dispatch:
