@@ -7,8 +7,9 @@ from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, get_market_candles, get_daily_history, get_intraday_prices
-from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, record_collector_run
+from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run
 from cot_data import COTDataError, get_gold_cot
+from macro_data import MacroDataError, get_macro_context
 import json
 
 
