@@ -171,6 +171,41 @@ def _analyse_one_timeframe(timeframe, payload):
     }
 
 
+def _market_regime(results, alignment_score):
+    """Describe technical regime; this is not a probability or trade call."""
+    required = ("H4", "H1", "M15", "M5")
+    if any(tf not in results or results[tf].get("status") != "ready" for tf in required):
+        return {"label":"UNCONFIRMED","direction":"NEUTRAL",
+                "higher_timeframe_alignment":"UNCONFIRMED",
+                "entry_timeframe_alignment":"UNCONFIRMED",
+                "alignment_score":round(alignment_score,3),
+                "explanation":"Recent H4, H1, M15 and M5 data are required.",
+                "risk_note":"Stand aside until required data is complete and fresh."}
+    h4,h1=results["H4"]["score"],results["H1"]["score"]
+    m15,m5=results["M15"]["score"],results["M5"]["score"]
+    higher="BULLISH" if h4>0 and h1>0 else "BEARISH" if h4<0 and h1<0 else "MIXED"
+    entry="BULLISH" if m15>0 and m5>0 else "BEARISH" if m15<0 and m5<0 else "MIXED"
+    if higher=="BULLISH" and alignment_score>=0.25:
+        label,direction="UPTREND","BULLISH"
+        explanation="Higher timeframes and the weighted score lean bullish."
+        risk="Avoid chasing extended candles; wait for a tested pullback and broker-price confirmation."
+    elif higher=="BEARISH" and alignment_score<=-0.25:
+        label,direction="DOWNTREND","BEARISH"
+        explanation="Higher timeframes and the weighted score lean bearish."
+        risk="Avoid chasing extended candles; wait for a tested pullback and broker-price confirmation."
+    elif abs(alignment_score)<=0.12 and higher!="MIXED":
+        label,direction="POSSIBLE RANGE","NEUTRAL"
+        explanation="Indicators are close to neutral; trend-following conditions are weak."
+        risk="Breakouts can fail in range-like conditions; wait for a confirmed close beyond the range."
+    else:
+        label,direction="MIXED / TRANSITION","NEUTRAL"
+        explanation="Timeframes disagree or trend strength is not decisive."
+        risk="Conflicting conditions increase uncertainty. WAIT is the safer research stance."
+    return {"label":label,"direction":direction,"higher_timeframe_alignment":higher,
+            "entry_timeframe_alignment":entry,"alignment_score":round(alignment_score,3),
+            "explanation":explanation,"risk_note":risk}
+
+
 def analyse_timeframes(market_data):
     """Return a research-only directional bias from the six supplied timeframes."""
     results = {
@@ -201,6 +236,7 @@ def analyse_timeframes(market_data):
             "research_signal": "WAIT",
             "technical_bias": "NEUTRAL",
             "alignment_score": 0,
+            "market_regime": _market_regime(results, 0),
             "timeframes": results,
             "missing_timeframes": missing,
             "message": "No directional bias issued because all six timeframes must have sufficient, recent data. " + ". ".join(reasons) + ".",
@@ -242,6 +278,7 @@ def analyse_timeframes(market_data):
         "research_signal": research_signal,
         "technical_bias": technical_bias,
         "alignment_score": round(alignment_score, 3),
+        "market_regime": _market_regime(results, alignment_score),
         "timeframes": results,
         "missing_timeframes": [],
         "message": message,
