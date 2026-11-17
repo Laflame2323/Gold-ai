@@ -37,24 +37,33 @@ def _rsi(values, period=14):
     return 100.0 - (100.0 / (1.0 + rs))
 
 
+def _ema_series(values, period):
+    output = [None] * len(values)
+    if len(values) < period:
+        return output
+    current = sum(values[:period]) / period
+    output[period - 1] = current
+    alpha = 2.0 / (period + 1)
+    for index in range(period, len(values)):
+        current += alpha * (values[index] - current)
+        output[index] = current
+    return output
+
+
 def _macd_histogram(values):
     if len(values) < 35:
         return None
-    # Calculate MACD at each point, then its 9-period EMA, using only past data.
-    fast = []
-    slow = []
-    for end in range(1, len(values) + 1):
-        fast.append(_ema(values[:end], 12))
-        slow.append(_ema(values[:end], 26))
+    fast = _ema_series(values, 12)
+    slow = _ema_series(values, 26)
     macd = [
-        fast[i] - slow[i]
-        for i in range(len(values))
-        if fast[i] is not None and slow[i] is not None
+        fast[index] - slow[index]
+        for index in range(len(values))
+        if fast[index] is not None and slow[index] is not None
     ]
-    if len(macd) < 9:
+    signal_series = _ema_series(macd, 9)
+    if not signal_series or signal_series[-1] is None:
         return None
-    signal = _ema(macd, 9)
-    return macd[-1] - signal
+    return macd[-1] - signal_series[-1]
 
 
 def _signal_for_prefix(closes):
