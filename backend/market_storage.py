@@ -75,7 +75,7 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
     """Read one broker-specific timeframe; never mix brokers or reference feeds."""
     if timeframe not in MT5_TIMEFRAME_SECONDS:
         raise MarketStorageError("Unsupported MT5 timeframe.")
-    query = urlencode({
+    base_params = {
         "select": "candle_time,open,high,low,close,volume,fetched_at,quality_status,is_closed",
         "symbol": f"eq.{symbol}",
         "source": f"eq.{source}",
@@ -83,9 +83,16 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
         "is_closed": "eq.true",
         "quality_status": "eq.verified",
         "order": "candle_time.desc",
-        "limit": "500",
-    })
-    rows = _read_supabase_rows(query)
+        "limit": "1000",
+    }
+    # Supabase projects commonly cap one REST response at 1,000 rows.
+    # Page explicitly so backtests can read the full retained MT5 lookback.
+    rows = []
+    for offset in range(0, 5000, 1000):
+        page = _read_supabase_rows(urlencode({**base_params, "offset": str(offset)}))
+        rows.extend(page)
+        if len(page) < 1000:
+            break
     candles_by_time = {}
     for row in rows:
         try:
