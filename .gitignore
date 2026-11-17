@@ -1,0 +1,28 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / frontend tooling
+node_modules/
+dist/
+.next/
+.vercel/
+
+# MetaTrader / MetaEditor local outputs
+*.ex5
+*.log
+*.cache
