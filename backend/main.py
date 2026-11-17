@@ -154,6 +154,31 @@ def market_candles(timeframe: str = "M15"):
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@app.get("/market/archive-test")
+def market_archive_test(timeframe: str = "M1"):
+    selected_timeframe = timeframe.upper()
+    supported = {"M1", "M5", "M15", "M30", "H1", "H4"}
+    if selected_timeframe not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported timeframe. Use M1, M5, M15, M30, H1 or H4."
+        )
+    try:
+        market = get_market_candles(selected_timeframe)
+        archive = archive_market_candles(market)
+        return {
+            "symbol": market.get("symbol", "XAUUSD"),
+            "timeframe": selected_timeframe,
+            "market_data": "available",
+            "archive_status": archive.get("status"),
+            "rows_sent": archive.get("rows_sent", 0),
+            "http_status": archive.get("http_status"),
+            "message": archive.get("message"),
+        }
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.post("/assistant")
 def assistant(payload: AssistantRequest):
     prompt = payload.prompt.strip().lower()
