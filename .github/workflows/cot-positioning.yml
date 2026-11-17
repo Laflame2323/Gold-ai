@@ -32,6 +32,7 @@ jobs:
           import os
           import sys
           import urllib.request
+          import urllib.error
 
           url = os.environ["GOLD_AI_API_URL"].rstrip("/") + "/research/cot"
           request = urllib.request.Request(
@@ -42,6 +43,10 @@ jobs:
               with urllib.request.urlopen(request, timeout=90) as response:
                   payload = json.loads(response.read().decode("utf-8"))
                   print("Backend HTTP:", response.status)
+          except urllib.error.HTTPError as exc:
+              detail = exc.read(1500).decode("utf-8", errors="replace")
+              print("CFTC archive HTTP error:", exc.code, detail)
+              sys.exit(1)
           except Exception as exc:
               print("CFTC archive request failed:", repr(exc))
               sys.exit(1)
