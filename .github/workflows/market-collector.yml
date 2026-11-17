@@ -80,3 +80,46 @@ jobs:
           if failed or missing or history_failed:
               sys.exit(1)
           PY
+
+      - name: Verify MT5 ingestion rejects unauthenticated requests
+        env:
+          GOLD_AI_API_URL: https://gold-ai-backend-p9el.onrender.com
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+          import urllib.error
+
+          url = os.environ["GOLD_AI_API_URL"].rstrip("/") + "/broker/mt5/candles"
+          body = {
+              "broker_server": "security-probe",
+              "symbol": "XAUUSD",
+              "timeframe": "M1",
+              "candles": [{
+                  "time": 1609459200,
+                  "open": 1900.0,
+                  "high": 1901.0,
+                  "low": 1899.0,
+                  "close": 1900.5
+              }]
+          }
+          request = urllib.request.Request(
+              url,
+              data=json.dumps(body).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  status = response.status
+          except urllib.error.HTTPError as exc:
+              status = exc.code
+
+          print("Unauthenticated MT5 ingestion response:", status)
+          if status not in (401, 503):
+              print("SECURITY CHECK FAILED: unauthenticated MT5 request was not rejected.")
+              sys.exit(1)
+          print("SECURITY CHECK PASSED: MT5 ingestion remains locked without a valid token.")
+          PY
