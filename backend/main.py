@@ -156,6 +156,7 @@ def assistant(payload: AssistantRequest):
             "Advanced AI analysis and MT5 integration are still being developed."
         )
     }
+    # Gold AI assistant endpoint update
 
 
 
