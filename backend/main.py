@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,14 +7,14 @@ from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, get_market_candles
-from market_storage import archive_market_candles
+from market_storage import archive_market_candles, record_collector_run
 import json
 
 
 app = FastAPI(
     title="Gold AI",
     description="Gold Trading Analysis API",
-    version="1.3.0"
+    version="1.3.1"
 )
 
 app.add_middleware(
@@ -45,6 +46,7 @@ def health():
 
 @app.get("/analyse")
 def analyse():
+    started_at = datetime.now(timezone.utc)
     selected_timeframes = ["M1", "M5", "M15", "M30", "H1", "H4"]
     market_data = {}
     archive_results = {}
@@ -63,7 +65,7 @@ def analyse():
                 market_data[timeframe] = job.result()
                 archive_results[timeframe] = archive_market_candles(market_data[timeframe])
             except Exception as exc:
-                provider_errors[timeframe] = str(exc)
+                provider_errors[timeframe] = str(exc)[:300]
 
     analysis = analyse_timeframes(market_data)
     if provider_errors:
@@ -75,6 +77,9 @@ def analyse():
         analysis["research_signal"] = "WAIT"
         analysis["technical_bias"] = "NEUTRAL"
         analysis["message"] += " Provider errors: " + error_summary
+
+    # Audit writes are best-effort and must never interrupt the market response.
+    collector_audit = record_collector_run(started_at, archive_results, provider_errors)
 
     message = analysis["message"]
     if analysis["research_signal"] in {"BUY", "SELL"}:
@@ -96,6 +101,7 @@ def analyse():
         "research_only": True,
         "data_source": "XAUS reference-market feed",
         "archive_status": archive_results,
+        "collector_audit": collector_audit,
         **analysis,
         "message": message
     }
@@ -246,7 +252,7 @@ def assistant(payload: AssistantRequest):
 @app.get("/debug/build")
 def debug_build():
     return {
-        "build": "GOLD-AI-CANDLES-140",
+        "build": "GOLD-AI-COLLECTOR-AUDIT-131",
         "version": app.version,
         "file": __file__,
         "routes": [route.path for route in app.routes]
