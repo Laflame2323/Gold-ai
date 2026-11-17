@@ -222,3 +222,5 @@ a { color: inherit; text-decoration: none; }
 .tf-state.bad{color:var(--red)}
 .tf-monitor-item small{color:#8290a5;font-size:8px;line-height:1.4;overflow-wrap:anywhere}
 @media(max-width:760px){.timeframe-monitor-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.timeframe-monitor-heading{align-items:flex-start;flex-direction:column}}
+
+/* Multi-timeframe monitor deployment refresh */
