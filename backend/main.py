@@ -727,13 +727,17 @@ def debug_build():
 
 @app.get("/research/ml/evaluate-triple-barrier-mtf")
 def research_ml_evaluate_triple_barrier_mtf(
-    horizon: int = 12, pt_atr: float = 1.5, sl_atr: float = 1.0
+    base_timeframe: str = "M30", horizon: int = 24,
+    pt_atr: float = 1.5, sl_atr: float = 1.0,
 ):
-    """Run ATR triple-barrier meta-label research on authenticated broker candles."""
+    """Run read-only triple-barrier meta-label research on aligned broker candles."""
     from triple_barrier_research import evaluate_triple_barrier_meta
 
+    selected_base = base_timeframe.upper()
+    if selected_base not in {"H1", "M30"}:
+        raise HTTPException(status_code=400, detail="base_timeframe must be H1 or M30.")
     if horizon < 2 or horizon > 100:
-        raise HTTPException(status_code=400, detail="horizon must be between 2 and 100 candles.")
+        raise HTTPException(status_code=400, detail="horizon must be between 2 and 100.")
     if not math.isfinite(pt_atr) or not 0.1 <= pt_atr <= 10:
         raise HTTPException(status_code=400, detail="pt_atr must be between 0.1 and 10.")
     if not math.isfinite(sl_atr) or not 0.1 <= sl_atr <= 10:
@@ -743,13 +747,11 @@ def research_ml_evaluate_triple_barrier_mtf(
         if not mt5_source:
             raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
         timeframes = ("H4", "H1", "M30", "M15")
-        # Each timeframe may require many paged Supabase reads. Fetch the four
-        # independent histories concurrently to avoid serial archive timeouts.
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
                 timeframe: executor.submit(
                     get_mt5_market_candles,
-                    mt5_source["symbol"], mt5_source["source"], timeframe
+                    mt5_source["symbol"], mt5_source["source"], timeframe,
                 )
                 for timeframe in timeframes
             }
@@ -762,7 +764,8 @@ def research_ml_evaluate_triple_barrier_mtf(
                 raise HTTPException(status_code=503, detail=f"{timeframe} archive is stale.")
             candles_by_timeframe[timeframe] = market.get("candles") or []
         result = evaluate_triple_barrier_meta(
-            candles_by_timeframe, horizon=horizon, pt_atr=pt_atr, sl_atr=sl_atr
+            candles_by_timeframe, horizon=horizon, pt_atr=pt_atr,
+            sl_atr=sl_atr, base_timeframe=selected_base,
         )
         return {
             **result,
