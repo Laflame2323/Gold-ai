@@ -197,7 +197,7 @@ def _confidence_coverage(rows, labels, weights, thresholds=(0.55, 0.60, 0.65, 0.
         correct = sum((p >= 0.5) == bool(y) for p, y in selected)
         count = len(selected)
         reports.append({
-            "confidence_threshold": threshold,
+            "probability_threshold": threshold,
             "selected_samples": count,
             "coverage_pct": round(count / total * 100.0, 2) if total else 0.0,
             "abstention_pct": round((total - count) / total * 100.0, 2) if total else 100.0,
@@ -205,11 +205,26 @@ def _confidence_coverage(rows, labels, weights, thresholds=(0.55, 0.60, 0.65, 0.
             "up_predictions": sum(p >= threshold for p, _ in selected),
             "down_predictions": sum(p <= 1.0 - threshold for p, _ in selected),
         })
+    calibration_bins = []
+    for lower, upper in ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6),
+                         (0.6, 0.8), (0.8, 1.0000001)):
+        bucket = [(p, y) for p, y in zip(probabilities, labels)
+                  if lower <= p < upper]
+        calibration_bins.append({
+            "probability_range": [lower, min(upper, 1.0)],
+            "samples": len(bucket),
+            "mean_predicted_up_probability": round(sum(p for p, _ in bucket) / len(bucket), 4) if bucket else None,
+            "observed_up_rate": round(sum(y for _, y in bucket) / len(bucket), 4) if bucket else None,
+        })
+    brier_score = (sum((p - y) ** 2 for p, y in zip(probabilities, labels)) / total
+                   if total else None)
     return {
-        "method": "symmetric probability threshold; lower-confidence predictions abstain",
+        "method": "symmetric model-probability threshold; lower-probability predictions abstain",
         "total_test_samples": total,
         "thresholds": reports,
-        "warning": "Higher confidence thresholds reduce coverage and do not guarantee higher future accuracy.",
+        "brier_score": round(brier_score, 6) if brier_score is not None else None,
+        "calibration_bins": calibration_bins,
+        "warning": "These are uncalibrated model probabilities, not proven confidence levels. Higher thresholds reduce coverage and do not guarantee higher future accuracy.",
     }
 
 def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
