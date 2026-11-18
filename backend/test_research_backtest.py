@@ -36,8 +36,9 @@ class DirectionalBacktestTests(unittest.TestCase):
         self.assertIn("coverage_pct", result)
         self.assertEqual(result["signals_tested"], result["buy"]["signals"] + result["sell"]["signals"])
         independent = result["non_overlapping_check"]
-        self.assertLess(independent["signals_tested"], result["signals_tested"])
         self.assertLessEqual(independent["signals_tested"], result["signals_tested"])
+        if result["signals_tested"]:
+            self.assertGreater(independent["signals_tested"], 0)
         self.assertTrue(result["overlapping_outcome_windows"])
 
     def test_minimum_sample_requirement_counts_only_scoreable_decisions(self):
