@@ -723,3 +723,45 @@ def debug_build():
         "file": __file__,
         "routes": [route.path for route in app.routes]
     }
+
+
+@app.get("/research/ml/evaluate-gradient-boosting-mtf")
+def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: float = 0.0):
+    """Run an isolated HistGradientBoosting candidate on aligned broker candles."""
+    from gradient_boosting_research import evaluate_gradient_boosting
+
+    if horizon < 1 or horizon > 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
+    if not math.isfinite(min_move_pct) or not 0 <= min_move_pct <= 10:
+        raise HTTPException(status_code=400, detail="min_move_pct must be between 0 and 10.")
+    try:
+        mt5_source = get_latest_mt5_source()
+        if not mt5_source:
+            raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
+        candles_by_timeframe = {}
+        for timeframe in ("H4", "H1", "M30", "M15"):
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], timeframe
+            )
+            if market.get("data_status") != "recent":
+                raise HTTPException(status_code=503, detail=f"{timeframe} archive is stale.")
+            candles_by_timeframe[timeframe] = market.get("candles") or []
+        result = evaluate_gradient_boosting(
+            candles_by_timeframe, horizon=horizon, min_move_pct=min_move_pct
+        )
+        return {
+            **result,
+            "symbol": mt5_source["symbol"],
+            "broker_source": mt5_source["source"],
+            "data_source": "Authenticated MT5 broker archive (read-only)",
+            "timeframe_data": {
+                tf: {"count": len(candles_by_timeframe[tf])}
+                for tf in candles_by_timeframe
+            },
+            "research_only": True, "read_only": True,
+            "execution_enabled": False, "accuracy_is_live": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
