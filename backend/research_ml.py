@@ -91,8 +91,8 @@ def _transform(rows, means, scales):
     return [[(row[j] - means[j]) / scales[j] for j in range(len(means))] for row in rows]
 
 
-def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01, return_diagnostics=False):
-    """Vectorized batch logistic fit; preserves the existing update rule and epoch cap."""
+def _fit_logistic(rows, labels, epochs=1200, learning_rate=0.04, l2=0.01, return_diagnostics=False):
+    """Vectorized batch logistic fit with a 1200-epoch ceiling and early stopping."""
     import numpy as np
 
     features = np.asarray(rows, dtype=np.float64)
@@ -121,7 +121,7 @@ def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01, return_
         bias -= learning_rate * bias_gradient
         coefficients -= learning_rate * (feature_gradients + l2 * coefficients)
 
-        # Keep the original convergence rule and fixed 200-epoch ceiling.
+        # Keep the convergence rule; allow more iterations before declaring non-convergence.
         stable_epochs = stable_epochs + 1 if max_gradient < 0.001 else 0
         if stable_epochs >= 8:
             break
