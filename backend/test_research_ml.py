@@ -45,6 +45,16 @@ class LogisticResearchTests(unittest.TestCase):
         self.assertIn("up", result["untouched_test"]["precision"])
         self.assertIn("down", result["untouched_test"]["precision"])
         self.assertIn("prediction_counts", result["untouched_test"])
+        coverage = result["confidence_coverage"]
+        self.assertEqual(coverage["total_test_samples"], result["untouched_test"]["samples"])
+        self.assertEqual([x["confidence_threshold"] for x in coverage["thresholds"]],
+                         [0.55, 0.60, 0.65, 0.70])
+        self.assertTrue(all(0 <= x["coverage_pct"] <= 100
+                            and 0 <= x["abstention_pct"] <= 100
+                            for x in coverage["thresholds"]))
+        self.assertTrue(all(x["selected_samples"] <= coverage["total_test_samples"]
+                            for x in coverage["thresholds"]))
+
         self.assertFalse(result["execution_enabled"])
 
     def test_walk_forward_uses_sequential_purged_folds(self):
