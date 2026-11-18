@@ -66,18 +66,18 @@ def _weights(labels):
     return [total / (len(counts) * counts[label]) for label in labels]
 
 
-def _make_samples(candles_by_timeframe, horizon, pt_atr, sl_atr):
+def _make_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, base_timeframe):
     import numpy as np
 
-    base = candles_by_timeframe.get("H1")
+    base = candles_by_timeframe.get(base_timeframe)
     if not isinstance(base, list) or len(base) < 1000:
         return None, {"status": "insufficient_data", "ai_trained": False,
-                      "message": "At least 1,000 H1 candles are required."}
+                      "message": f"At least 1,000 {base_timeframe} candles are required."}
     aligned = build_multitimeframe_features(
-        candles_by_timeframe, base_timeframe="H1",
+        candles_by_timeframe, base_timeframe=base_timeframe,
         timeframes=("H4", "H1", "M30", "M15"),
     )
-    by_decision = {int(c["time"]) + 3600: i for i, c in enumerate(base)}
+    base_interval = {"H1": 3600, "M30": 1800}[base_timeframe]\n    by_decision = {int(c["time"]) + base_interval: i for i, c in enumerate(base)}
     atr = _atr(base, 14)
     rows, outcomes, sides, decisions, label_end_indices = [], [], [], [], []
     counts = {"profit_target": 0, "stop_loss": 0, "vertical_or_no_touch": 0,
@@ -142,7 +142,7 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=12,
     for name, value in (("pt_atr", pt_atr), ("sl_atr", sl_atr)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0.1 <= value <= 10:
             raise ValueError(f"{name} must be between 0.1 and 10")
-    sample, error = _make_samples(candles_by_timeframe, horizon, float(pt_atr), float(sl_atr))
+    sample, error = _make_samples(candles_by_timeframe, horizon, float(pt_atr), float(sl_atr), base_timeframe)
     if error:
         return error
 
@@ -213,12 +213,12 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=12,
     y_test = [meta_y[k] for k in test]
     return {
         "status": "complete",
-        "model_type": "atr_triple_barrier_rule_side_meta_label_hist_gradient_boosting",
+        "model_type": f"atr_triple_barrier_{base_timeframe.lower()}_rule_side_meta_label_hist_gradient_boosting",\n        "base_timeframe": base_timeframe,
         "candidate_model_trained": True, "ai_trained": False,
         "production_model_persisted": False,
         "eligible_samples": len(decisions), "split_samples": sizes,
         "barriers": {"profit_target_atr": float(pt_atr), "stop_loss_atr": float(sl_atr),
-                     "vertical_horizon_h1_candles": horizon,
+                     "vertical_horizon_candles": horizon,\n                     "base_timeframe": base_timeframe,
                      "same_bar_both_touched": "neutral_conservative"},
         "outcome_counts": sample["counts"],
         "triple_barrier_outcomes": {
@@ -226,7 +226,7 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=12,
             "lower_barrier_hits": outcomes.count(-1),
             "vertical_or_ambiguous": outcomes.count(0),
         },
-        "primary_rule": "side = sign of completed H1 EMA10 gap",
+        "primary_rule": f"side = sign of completed {base_timeframe} EMA10 gap",
         "primary_test_meta_label_win_rate_pct": round(primary_accuracy, 2),
         "meta_model_test": _metrics(y_test, test_meta_pred),
         "test_majority_baseline_accuracy_pct": round(
@@ -242,7 +242,7 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=12,
         "research_only": True, "read_only": True, "execution_enabled": False,
         "accuracy_is_live": False,
         "limitations": [
-            "Rule-side meta-labeling only; primary side is completed H1 EMA10 trend.",
+            f"Rule-side meta-labeling only; primary side is completed {base_timeframe} EMA10 trend.",
             "No spread, commission, slippage or swap costs are included.",
             "Same-bar touches of both horizontal barriers are labeled neutral.",
             "Test is chronological but is not a newly collected future period.",
