@@ -218,11 +218,24 @@ def _confidence_coverage(rows, labels, weights, thresholds=(0.55, 0.60, 0.65, 0.
         })
     brier_score = (sum((p - y) ** 2 for p, y in zip(probabilities, labels)) / total
                    if total else None)
+    # Expected calibration error weights each bin's probability/rate gap by its share.
+    populated_bins = [bucket for bucket in calibration_bins if bucket["samples"]]
+    expected_calibration_error = (
+        sum(bucket["samples"] / total * abs(
+            bucket["mean_predicted_up_probability"] - bucket["observed_up_rate"]
+        ) for bucket in populated_bins) if total else None
+    )
+    max_calibration_error = (
+        max(abs(bucket["mean_predicted_up_probability"] - bucket["observed_up_rate"])
+            for bucket in populated_bins) if populated_bins else None
+    )
     return {
         "method": "symmetric model-probability threshold; lower-probability predictions abstain",
         "total_test_samples": total,
         "thresholds": reports,
         "brier_score": round(brier_score, 6) if brier_score is not None else None,
+        "expected_calibration_error": round(expected_calibration_error, 6) if expected_calibration_error is not None else None,
+        "max_calibration_error": round(max_calibration_error, 6) if max_calibration_error is not None else None,
         "calibration_bins": calibration_bins,
         "warning": "These are uncalibrated model probabilities, not proven confidence levels. Higher thresholds reduce coverage and do not guarantee higher future accuracy.",
     }
