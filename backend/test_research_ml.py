@@ -42,6 +42,17 @@ class LogisticResearchTests(unittest.TestCase):
         self.assertIn("confusion_matrix", result["untouched_test"])
         self.assertFalse(result["execution_enabled"])
 
+    def test_walk_forward_uses_sequential_purged_folds(self):
+        result = evaluate_logistic_research(synthetic_candles(), horizon=5)
+        walk = result["walk_forward"]
+        self.assertEqual(walk["total_folds"], 4)
+        self.assertGreaterEqual(walk["completed_folds"], 3)
+        completed = [fold for fold in walk["folds"] if fold["status"] == "complete"]
+        self.assertTrue(all(fold["test_samples"] >= 50 for fold in completed))
+        self.assertTrue(all(fold["scaler_fit_on"] == "this fold's training block only"
+                            for fold in completed))
+        self.assertIsNotNone(walk["mean_fold_balanced_accuracy_pct"])
+
     def test_rejects_non_increasing_time(self):
         candles = synthetic_candles()
         candles[100]["time"] = candles[99]["time"]
