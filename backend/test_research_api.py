@@ -17,6 +17,9 @@ class ResearchHoldoutEndpointTests(unittest.TestCase):
         self.assertEqual(result["timeframe"], "H1")
         self.assertFalse(result["execution_enabled"])
         self.assertTrue(result["read_only"])
+        self.assertFalse(result["ai_trained"])
+        self.assertFalse(result["accuracy_is_live"])
+        self.assertEqual(result["model_type"], "rule_based_research_baseline")
         self.assertIn("untouched_holdout", result)
 
     @patch("main.get_mt5_market_candles")
