@@ -91,6 +91,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
         raise ValueError("minimum_samples must be a positive integer")
     # Decision indices start at 59 and end at len(candles) - horizon - 1.
     # Require the requested number of genuinely scoreable decision points.
+    required_candles = 59 + minimum_samples + horizon
     normalized = []
     previous_time = None
     for candle in candles:
