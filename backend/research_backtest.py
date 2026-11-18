@@ -87,11 +87,18 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
         raise ValueError("candles must be a list")
     if isinstance(horizon, bool) or not isinstance(horizon, int) or not 1 <= horizon <= 100:
         raise ValueError("horizon must be an integer between 1 and 100")
-    if len(candles) < max(60 + horizon + 1, minimum_samples + horizon + 1):
+    if isinstance(minimum_samples, bool) or not isinstance(minimum_samples, int) or minimum_samples < 1:
+        raise ValueError("minimum_samples must be a positive integer")
+    # Decision indices start at 59 and end at len(candles) - horizon - 1.
+    # Require the requested number of genuinely scoreable decision points.
+    required_candles = 59 + minimum_samples + horizon
+    if len(candles) < required_candles:
         return {
             "status": "insufficient_data",
             "candle_count": len(candles),
             "horizon_candles": horizon,
+            "minimum_evaluated_decision_points": minimum_samples,
+            "required_candle_count": required_candles,
             "message": "More completed historical candles are required before testing.",
         }
 
