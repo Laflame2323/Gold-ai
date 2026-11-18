@@ -29,7 +29,13 @@ def _transform(rows, means, scales):
 
 
 def _walk_forward(rows, labels, decision_indices, candle_count, horizon):
-    boundaries = [int(candle_count * fraction)
+    # Split within the actual multi-timeframe overlap, not the full H1 archive.
+    # Sparse/shorter M15 or M30 history must not push every aligned row into
+    # the final test block.
+    aligned_start = min(decision_indices)
+    aligned_end = max(decision_indices) + 1
+    aligned_span = aligned_end - aligned_start
+    boundaries = [aligned_start + int(aligned_span * fraction)
                   for fraction in (0.30, 0.40, 0.50, 0.60, 0.70)]
     folds = []
     for number, (train_end, test_end) in enumerate(zip(boundaries, boundaries[1:]), 1):
@@ -109,8 +115,14 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
         decision_indices.append(index)
 
     candle_count = len(base)
-    train_boundary = int(candle_count * 0.70)
-    validation_boundary = int(candle_count * 0.85)
+    # Chronological splits are based on the time range with complete,
+    # leakage-safe MTF features. The full H1 history can be much older than
+    # the shortest timeframe archive.
+    aligned_start = min(decision_indices)
+    aligned_end = max(decision_indices) + 1
+    aligned_span = aligned_end - aligned_start
+    train_boundary = aligned_start + int(aligned_span * 0.70)
+    validation_boundary = aligned_start + int(aligned_span * 0.85)
     train_positions = [i for i, d in enumerate(decision_indices) if d < train_boundary - horizon]
     validation_positions = [i for i, d in enumerate(decision_indices)
                             if train_boundary + horizon <= d < validation_boundary - horizon]
