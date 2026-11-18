@@ -40,6 +40,11 @@ class LogisticResearchTests(unittest.TestCase):
         self.assertEqual(result["purge_candles_each_boundary"], 5)
         self.assertIn("balanced_accuracy_pct", result["untouched_test"])
         self.assertIn("confusion_matrix", result["untouched_test"])
+        self.assertIn("precision", result["untouched_test"])
+        self.assertIn("recall", result["untouched_test"])
+        self.assertIn("up", result["untouched_test"]["precision"])
+        self.assertIn("down", result["untouched_test"]["precision"])
+        self.assertIn("prediction_counts", result["untouched_test"])
         self.assertFalse(result["execution_enabled"])
 
     def test_walk_forward_uses_sequential_purged_folds(self):
