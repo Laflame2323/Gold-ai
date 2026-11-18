@@ -1,4 +1,4 @@
-"""Leakage-aware, pure-Python logistic-regression research evaluator.
+"""Leakage-aware logistic-regression research evaluator (NumPy-accelerated fitting).
 
 Features use information available at each completed decision candle. Labels
 use the next candle open through the configured horizon close. Scaling is fit
@@ -92,28 +92,38 @@ def _transform(rows, means, scales):
 
 
 def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01):
-    """Fit with a bounded epoch budget so hosted research requests finish promptly."""
-    weights = [0.0] * (len(FEATURE_NAMES) + 1)
-    count = len(rows)
+    """Vectorized batch logistic fit; preserves the existing update rule and epoch cap."""
+    import numpy as np
+
+    features = np.asarray(rows, dtype=np.float64)
+    targets = np.asarray(labels, dtype=np.float64)
+    count = features.shape[0]
+    coefficients = np.zeros(features.shape[1], dtype=np.float64)
+    bias = 0.0
     stable_epochs = 0
+
     for _ in range(epochs):
-        gradients = [0.0] * len(weights)
-        for row, label in zip(rows, labels):
-            probability = _sigmoid(weights[0] + sum(w * x for w, x in zip(weights[1:], row)))
-            error = probability - label
-            gradients[0] += error
-            for j, value in enumerate(row, 1):
-                gradients[j] += error * value
-        max_gradient = max(abs(value) / count for value in gradients)
-        weights[0] -= learning_rate * gradients[0] / count
-        for j in range(1, len(weights)):
-            weights[j] -= learning_rate * (gradients[j] / count + l2 * weights[j])
-        # Stop once the batch gradient is consistently small; the fixed cap is
-        # a hard upper bound even on data that does not converge quickly.
+        logits = bias + features @ coefficients
+        # Match _sigmoid's bounded exponent and avoid numerical overflow.
+        logits = np.clip(logits, -60.0, 60.0)
+        probabilities = 1.0 / (1.0 + np.exp(-logits))
+        errors = probabilities - targets
+        bias_gradient = float(np.mean(errors))
+        feature_gradients = (features.T @ errors) / count
+        max_gradient = max(
+            abs(bias_gradient),
+            float(np.max(np.abs(feature_gradients))) if feature_gradients.size else 0.0,
+        )
+
+        bias -= learning_rate * bias_gradient
+        coefficients -= learning_rate * (feature_gradients + l2 * coefficients)
+
+        # Keep the original convergence rule and fixed 200-epoch ceiling.
         stable_epochs = stable_epochs + 1 if max_gradient < 0.001 else 0
         if stable_epochs >= 8:
             break
-    return weights
+
+    return [float(bias), *[float(value) for value in coefficients]]
 
 
 def _score(rows, labels, weights):
