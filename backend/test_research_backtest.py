@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from research_backtest import (
     run_directional_backtest, compare_directional_horizons,
@@ -40,12 +41,17 @@ class DirectionalBacktestTests(unittest.TestCase):
         if result["signals_tested"]:
             self.assertGreater(independent["signals_tested"], 0)
         self.assertTrue(result["overlapping_outcome_windows"])
+
+    def test_signal_enters_at_next_candle_open(self):
+        candles = trend_candles(180)
+        with patch("research_backtest._signal_for_prefix", return_value="BUY"):
+            result = run_directional_backtest(candles, horizon=5)
+        self.assertEqual(result["status"], "complete")
         first_trade = result["_trades"][0]
         decision_index = first_trade["decision_index"]
-        source = trend_candles(240)
-        self.assertEqual(first_trade["entry_time"], source[decision_index + 1]["time"])
-        self.assertEqual(first_trade["entry_price"], source[decision_index + 1]["open"])
-        self.assertEqual(first_trade["exit_price"], source[decision_index + 5]["close"])
+        self.assertEqual(first_trade["entry_time"], candles[decision_index + 1]["time"])
+        self.assertEqual(first_trade["entry_price"], candles[decision_index + 1]["open"])
+        self.assertEqual(first_trade["exit_price"], candles[decision_index + 5]["close"])
 
     def test_minimum_sample_requirement_counts_only_scoreable_decisions(self):
         too_short = run_directional_backtest(trend_candles(163), horizon=5)
