@@ -91,9 +91,11 @@ def _transform(rows, means, scales):
     return [[(row[j] - means[j]) / scales[j] for j in range(len(means))] for row in rows]
 
 
-def _fit_logistic(rows, labels, epochs=700, learning_rate=0.04, l2=0.01):
+def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01):
+    """Fit with a bounded epoch budget so hosted research requests finish promptly."""
     weights = [0.0] * (len(FEATURE_NAMES) + 1)
     count = len(rows)
+    stable_epochs = 0
     for _ in range(epochs):
         gradients = [0.0] * len(weights)
         for row, label in zip(rows, labels):
@@ -102,9 +104,15 @@ def _fit_logistic(rows, labels, epochs=700, learning_rate=0.04, l2=0.01):
             gradients[0] += error
             for j, value in enumerate(row, 1):
                 gradients[j] += error * value
+        max_gradient = max(abs(value) / count for value in gradients)
         weights[0] -= learning_rate * gradients[0] / count
         for j in range(1, len(weights)):
             weights[j] -= learning_rate * (gradients[j] / count + l2 * weights[j])
+        # Stop once the batch gradient is consistently small; the fixed cap is
+        # a hard upper bound even on data that does not converge quickly.
+        stable_epochs = stable_epochs + 1 if max_gradient < 0.001 else 0
+        if stable_epochs >= 8:
+            break
     return weights
 
 
