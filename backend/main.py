@@ -758,11 +758,29 @@ def research_ml_evaluate_triple_barrier_mtf(
             markets = {timeframe: future.result()
                        for timeframe, future in futures.items()}
         candles_by_timeframe = {}
+        timeframe_data = {}
         for timeframe in timeframes:
             market = markets[timeframe]
-            if market.get("data_status") != "recent":
-                raise HTTPException(status_code=503, detail=f"{timeframe} archive is stale.")
-            candles_by_timeframe[timeframe] = market.get("candles") or []
+            candles = market.get("candles") or []
+            if not candles:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{timeframe} archive contains no candles.",
+                )
+            candles_by_timeframe[timeframe] = candles
+            timeframe_data[timeframe] = {
+                "count": market.get("count", len(candles)),
+                "last_candle_at": market.get("last_candle_at"),
+                "age_seconds": market.get("age_seconds"),
+                "data_status": market.get("data_status"),
+            }
+        # This endpoint evaluates completed historical candles, not live signals.
+        # Staleness must be visible in the result, but must not block a valid
+        # historical walk-forward evaluation.
+        stale_timeframes = [
+            timeframe for timeframe, item in timeframe_data.items()
+            if item["data_status"] != "recent"
+        ]
         result = evaluate_triple_barrier_meta(
             candles_by_timeframe, horizon=horizon, pt_atr=pt_atr,
             sl_atr=sl_atr, base_timeframe=selected_base,
@@ -772,8 +790,12 @@ def research_ml_evaluate_triple_barrier_mtf(
             "symbol": mt5_source["symbol"],
             "broker_source": mt5_source["source"],
             "data_source": "Authenticated MT5 broker archive (read-only)",
-            "timeframe_data": {tf: {"count": len(candles_by_timeframe[tf])}
-                               for tf in candles_by_timeframe},
+            "timeframe_data": timeframe_data,
+            "data_freshness_warning": (
+                f"Historical evaluation used stale archives: {', '.join(stale_timeframes)}. "
+                "This result is not suitable for live decision-making."
+                if stale_timeframes else None
+            ),
             "research_only": True, "read_only": True,
             "execution_enabled": False, "accuracy_is_live": False,
         }
