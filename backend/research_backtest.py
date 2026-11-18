@@ -189,3 +189,41 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
             "Results are historical diagnostics, not a live accuracy guarantee."
         ),
     }
+
+
+
+def compare_directional_horizons(candles, horizons=(1, 3, 5, 10, 20), minimum_samples=100):
+    """Compare fixed horizons on the same candle history without selecting a winner."""
+    if not isinstance(horizons, (list, tuple)) or not horizons:
+        raise ValueError("horizons must be a non-empty list or tuple")
+    if len(set(horizons)) != len(horizons):
+        raise ValueError("horizons must not contain duplicates")
+    results = []
+    for horizon in horizons:
+        result = run_directional_backtest(
+            candles, horizon=horizon, minimum_samples=minimum_samples
+        )
+        results.append({
+            "horizon_candles": horizon,
+            "status": result["status"],
+            "evaluated_decision_points": result.get("evaluated_decision_points", 0),
+            "signals_tested": result.get("signals_tested", 0),
+            "coverage_pct": result.get("coverage_pct"),
+            "accuracy_pct": result.get("accuracy_pct"),
+            "average_signed_return_pct": result.get("average_signed_return_pct"),
+            "buy": result.get("buy"),
+            "sell": result.get("sell"),
+            "required_candle_count": result.get("required_candle_count"),
+        })
+    return {
+        "status": "complete" if all(row["status"] == "complete" for row in results) else "partial",
+        "strategy": "EMA20/EMA50 trend + RSI14 + MACD histogram confirmation",
+        "minimum_samples_per_horizon": minimum_samples,
+        "comparisons": results,
+        "selection_warning": (
+            "Do not choose a horizon from this same sample and report it as independent performance. "
+            "Confirm any candidate on a later untouched chronological holdout and include trading costs."
+        ),
+        "read_only": True,
+        "execution_enabled": False,
+    }
