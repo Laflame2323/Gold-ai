@@ -1,6 +1,7 @@
 import unittest
 
 from gradient_boosting_research import evaluate_gradient_boosting
+from triple_barrier_research import evaluate_triple_barrier_meta
 
 
 def candles(count, interval, start=1_700_000_000):
@@ -44,6 +45,27 @@ class GradientBoostingResearchTests(unittest.TestCase):
         del data["M15"]
         with self.assertRaises(ValueError):
             evaluate_gradient_boosting(data)
+
+
+    def test_atr_triple_barrier_meta_label_evaluator(self):
+        result = evaluate_triple_barrier_meta(history(), horizon=12)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["model_type"],
+                         "atr_triple_barrier_rule_side_meta_label_hist_gradient_boosting")
+        self.assertGreaterEqual(result["split_samples"]["train"], 50)
+        self.assertGreaterEqual(result["split_samples"]["validation"], 50)
+        self.assertGreaterEqual(result["split_samples"]["test"], 50)
+        self.assertEqual(len(result["validation_candidates"]), 6)
+        self.assertIn("primary_test_meta_label_win_rate_pct", result)
+        self.assertEqual(len(result["confidence_coverage"]), 6)
+        self.assertTrue(result["research_only"])
+        self.assertTrue(result["read_only"])
+        self.assertFalse(result["execution_enabled"])
+        self.assertFalse(result["ai_trained"])
+
+    def test_triple_barrier_rejects_invalid_horizon(self):
+        with self.assertRaises(ValueError):
+            evaluate_triple_barrier_meta(history(), horizon=1)
 
 
 if __name__ == "__main__":
