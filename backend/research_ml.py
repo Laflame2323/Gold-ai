@@ -182,12 +182,18 @@ def _walk_forward_evaluate(rows, labels, decision_indices, candle_count, horizon
         "note": "These development folds are diagnostic; the separate untouched test block remains the final holdout.",
     }
 
-def evaluate_logistic_research(candles, horizon=5):
-    """Train on an early block and report later validation and test blocks."""
+def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
+    """Train on an early block and report later validation and test blocks.
+
+    min_move_pct is a configurable neutral-zone filter in percentage points;
+    it is not a substitute for broker spread, commission or slippage modelling.
+    """
     if not isinstance(candles, list):
         raise ValueError("candles must be a list")
     if isinstance(horizon, bool) or not isinstance(horizon, int) or not 1 <= horizon <= 100:
         raise ValueError("horizon must be an integer between 1 and 100")
+    if isinstance(min_move_pct, bool) or not isinstance(min_move_pct, (int, float)) or not math.isfinite(min_move_pct) or not 0 <= min_move_pct <= 10:
+        raise ValueError("min_move_pct must be a finite number between 0 and 10")
     if len(candles) < MIN_CANDLES:
         return {
             "status": "insufficient_data", "candle_count": len(candles),
@@ -212,10 +218,13 @@ def evaluate_logistic_research(candles, horizon=5):
         normalized.append({"time": timestamp, **item})
 
     rows, labels, decision_indices = [], [], []
+    excluded_small_moves = 0
     for index in range(30, len(normalized) - horizon):
         entry = normalized[index + 1]["open"]
         exit_price = normalized[index + horizon]["close"]
-        if exit_price == entry:
+        move_pct = (exit_price / entry - 1.0) * 100.0
+        if abs(move_pct) <= float(min_move_pct):
+            excluded_small_moves += 1
             continue
         rows.append(_features(normalized, index))
         labels.append(1 if exit_price > entry else 0)
@@ -267,6 +276,8 @@ def evaluate_logistic_research(candles, horizon=5):
         "production_model_persisted": False,
         "feature_names": list(FEATURE_NAMES),
         "horizon_candles": horizon,
+        "neutral_zone_min_move_pct": round(float(min_move_pct), 6),
+        "excluded_small_move_outcomes": excluded_small_moves,
         "eligible_samples": total,
         "split_samples": {"train": len(train_rows), "validation": len(validation_rows), "test": len(test_rows)},
         "purge_candles_each_boundary": horizon,
