@@ -74,6 +74,62 @@ def _walk_forward(rows, labels, decision_indices, candle_count, horizon):
     }
 
 
+
+def _validation_ablation(rows, labels, train_positions, validation_positions):
+    """Compare a small predeclared set of timeframe groups on validation only."""
+    groups = {
+        "H4": list(range(0, 9)),
+        "H1": list(range(9, 18)),
+        "M30": list(range(18, 27)),
+        "M15": list(range(27, 36)),
+    }
+    configurations = (
+        ("H1_only", ("H1",)),
+        ("H4_H1", ("H4", "H1")),
+        ("H1_M30_M15", ("H1", "M30", "M15")),
+        ("all_timeframes", ("H4", "H1", "M30", "M15")),
+    )
+    train_labels = [labels[i] for i in train_positions]
+    validation_labels = [labels[i] for i in validation_positions]
+    majority = 1 if sum(train_labels) >= len(train_labels) / 2 else 0
+    baseline = sum(y == majority for y in validation_labels) / len(validation_labels) * 100.0
+    reports = []
+    for name, timeframes in configurations:
+        columns = [column for timeframe in timeframes for column in groups[timeframe]]
+        train_rows = [[rows[i][column] for column in columns] for i in train_positions]
+        validation_rows = [[rows[i][column] for column in columns] for i in validation_positions]
+        means, scales = _fit_scaler(train_rows)
+        train_x = _transform(train_rows, means, scales)
+        validation_x = _transform(validation_rows, means, scales)
+        weights = _fit_logistic(train_x, train_labels)
+        metrics = _score(validation_x, validation_labels, weights)
+        reports.append({
+            "candidate": name,
+            "timeframes": list(timeframes),
+            "feature_count": len(columns),
+            "validation": metrics,
+            "training_majority_baseline_accuracy_pct": round(baseline, 2),
+            "validation_accuracy_minus_baseline_pct_points": round(
+                metrics["accuracy_pct"] - baseline, 2
+            ),
+            "scaler_fit_on": "training block only",
+        })
+    ranked = sorted(
+        reports,
+        key=lambda item: (
+            item["validation"]["balanced_accuracy_pct"],
+            item["validation"]["accuracy_pct"],
+            -item["feature_count"],
+        ),
+        reverse=True,
+    )
+    return {
+        "selection_rule": "highest validation balanced accuracy; accuracy breaks ties; fewer features breaks remaining ties",
+        "candidates": reports,
+        "best_validation_candidate": ranked[0]["candidate"],
+        "warning": "Exploratory validation-only comparison. Do not treat the best validation score as final out-of-sample accuracy; a new future holdout is required before promotion.",
+    }
+
 def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_pct=0.0):
     if isinstance(horizon, bool) or not isinstance(horizon, int) or not 1 <= horizon <= 100:
         raise ValueError("horizon must be an integer between 1 and 100")
@@ -160,6 +216,7 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
 
     # Development walk-forward evaluation uses the aligned rows and original H1 indices.
     walk = _walk_forward(rows, labels, decision_indices, candle_count, horizon)
+    ablation = _validation_ablation(rows, labels, train_positions, validation_positions)
     return {
         "status": "complete",
         "model_type": "multi_timeframe_logistic_research_candidate",
@@ -178,6 +235,7 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
         "purge_candles_each_boundary": horizon,
         "scaler_fit_on": "training block only",
         "walk_forward": walk,
+        "validation_ablation": ablation,
         "train": train_metrics,
         "validation": validation_metrics,
         "untouched_test": test_metrics,
