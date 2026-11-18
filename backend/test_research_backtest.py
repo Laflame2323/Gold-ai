@@ -63,7 +63,18 @@ class DirectionalBacktestTests(unittest.TestCase):
         self.assertFalse(result["execution_enabled"])
 
     def test_chronological_holdout_scores_only_later_decisions(self):
-        candles = trend_candles(600)
+        candles = []
+        price = 2000.0
+        for index in range(600):
+            change = 0.1 + index * 0.001
+            price += change
+            candles.append({
+                "time": 1_700_000_000 + index * 60,
+                "open": price - change / 2,
+                "high": price + 0.1,
+                "low": price - change / 2 - 0.1,
+                "close": price,
+            })
         result = chronological_holdout_backtest(
             candles, horizon=5, minimum_samples=100, holdout_fraction=0.25
         )
