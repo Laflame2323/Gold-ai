@@ -303,7 +303,7 @@ def research_backtest_holdout(
 
 
 @app.get("/research/ml/evaluate")
-def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5):
+def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: float = 0.0):
     """Train an ephemeral research candidate and score a later chronological test block."""
     from research_ml import evaluate_logistic_research
 
@@ -331,7 +331,9 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5):
             symbol = market.get("symbol", "XAUUSD")
             broker_source = None
 
-        result = evaluate_logistic_research(market.get("candles") or [], horizon=horizon)
+        result = evaluate_logistic_research(
+            market.get("candles") or [], horizon=horizon, min_move_pct=min_move_pct
+        )
         return {
             **result,
             "symbol": symbol,
