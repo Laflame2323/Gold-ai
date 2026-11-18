@@ -47,7 +47,10 @@ jobs:
               sys.exit(1)
 
           required = {"M1", "M5", "M15", "M30", "H1", "H4"}
+          source = payload.get("data_source", "")
+          broker_mode = source.startswith("Authenticated MT5 broker feed")
           archives = payload.get("archive_status") or {}
+          timeframes = payload.get("timeframes") or {}
           saved = sorted(
               tf for tf, result in archives.items()
               if result.get("status") == "saved"
@@ -57,27 +60,40 @@ jobs:
               for tf, result in archives.items()
               if result.get("status") != "saved"
           }
-          missing = sorted(required - set(archives))
-          history = payload.get("history_archive") or {}
-          history_failed = {
-              name: result.get("status", "missing")
-              for name, result in history.items()
-              if result.get("status") != "saved"
+          missing = sorted(required - set(archives)) if not broker_mode else []
+          timeframe_status = {
+              tf: (timeframes.get(tf) or {}).get("status", "missing")
+              for tf in required
+          } if broker_mode else {}
+          unavailable_broker_timeframes = {
+              tf: status for tf, status in timeframe_status.items()
+              if status != "ready"
           }
-          for name in ("daily", "intraday"):
-              if name not in history:
-                  history_failed[name] = "missing"
+          history = payload.get("history_archive") or {}
+          history_failed = {}
+          if not broker_mode:
+              history_failed = {
+                  name: result.get("status", "missing")
+                  for name, result in history.items()
+                  if result.get("status") != "saved"
+              }
+              for name in ("daily", "intraday"):
+                  if name not in history:
+                      history_failed[name] = "missing"
           print(json.dumps({
               "symbol": payload.get("symbol", "XAUUSD"),
+              "data_source": source,
               "saved_timeframes": saved,
               "failed_timeframes": failed,
               "missing_timeframes": missing,
+              "broker_timeframe_status": timeframe_status,
+              "unavailable_broker_timeframes": unavailable_broker_timeframes,
               "history_archive": history,
               "history_failures": history_failed,
               "ai_trained": payload.get("ai_trained", False),
               "research_only": payload.get("research_only", True),
           }, indent=2))
-          if failed or missing or history_failed:
+          if failed or missing or history_failed or unavailable_broker_timeframes:
               sys.exit(1)
           PY
 
