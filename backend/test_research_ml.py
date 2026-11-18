@@ -47,13 +47,19 @@ class LogisticResearchTests(unittest.TestCase):
         self.assertIn("prediction_counts", result["untouched_test"])
         coverage = result["confidence_coverage"]
         self.assertEqual(coverage["total_test_samples"], result["untouched_test"]["samples"])
-        self.assertEqual([x["confidence_threshold"] for x in coverage["thresholds"]],
+        self.assertEqual([x["probability_threshold"] for x in coverage["thresholds"]],
                          [0.55, 0.60, 0.65, 0.70])
         self.assertTrue(all(0 <= x["coverage_pct"] <= 100
                             and 0 <= x["abstention_pct"] <= 100
                             for x in coverage["thresholds"]))
         self.assertTrue(all(x["selected_samples"] <= coverage["total_test_samples"]
                             for x in coverage["thresholds"]))
+        self.assertIsNotNone(coverage["brier_score"])
+        self.assertGreaterEqual(coverage["brier_score"], 0)
+        self.assertLessEqual(coverage["brier_score"], 1)
+        self.assertEqual(len(coverage["calibration_bins"]), 5)
+        self.assertTrue(all(0 <= x["samples"] <= coverage["total_test_samples"]
+                            for x in coverage["calibration_bins"]))
 
         self.assertFalse(result["execution_enabled"])
 
