@@ -320,7 +320,7 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
         raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
 
     request_started = time.perf_counter()
-    logger = logging.getLogger("gold_ai.research_ml")
+    logger = logging.getLogger("uvicorn.error")
     logger.info(
         "RESEARCH_EVAL_START timeframe=%s horizon=%s min_move_pct=%s",
         selected_timeframe, horizon, min_move_pct,
