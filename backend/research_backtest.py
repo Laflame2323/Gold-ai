@@ -297,29 +297,48 @@ def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, hold
     )
     complete = development["status"] == "complete" and holdout["status"] == "complete"
 
-    # Learn a simple majority-direction benchmark from development signals only,
-    # then score that fixed direction on the untouched holdout signal dates.
+    # Build the benchmark from every eligible decision bar, not just dates
+    # where the strategy happened to emit a signal. Freeze its direction using
+    # development outcomes, then score on all holdout decision opportunities.
     development_trades = development.pop("_trades", [])
-    direction_counts = {
-        direction: sum(1 for trade in development_trades if trade.get("actual_direction") == direction)
-        for direction in ("UP", "DOWN", "FLAT")
-    }
-    baseline_direction = (
-        max(direction_counts, key=direction_counts.get)
-        if sum(direction_counts.values()) else None
-    )
     holdout_trades = holdout.pop("_trades", [])
+
+    def realised_direction_counts(start, stop):
+        counts = {"UP": 0, "DOWN": 0, "FLAT": 0}
+        for index in range(start, stop - horizon):
+            entry = float(candles[index + 1]["open"])
+            exit_price = float(candles[index + horizon]["close"])
+            direction = "UP" if exit_price > entry else "DOWN" if exit_price < entry else "FLAT"
+            counts[direction] += 1
+        return counts
+
+    development_direction_counts = realised_direction_counts(59, split_index)
+    baseline_direction = (
+        max(development_direction_counts, key=development_direction_counts.get)
+        if sum(development_direction_counts.values()) else None
+    )
+    holdout_direction_counts = realised_direction_counts(split_index, len(candles))
+    holdout_opportunities = sum(holdout_direction_counts.values())
     baseline_hits = (
+        holdout_direction_counts.get(baseline_direction, 0)
+        if baseline_direction else 0
+    )
+    baseline_on_signal_dates = (
         sum(1 for trade in holdout_trades if trade.get("actual_direction") == baseline_direction)
         if baseline_direction else 0
     )
     holdout_baseline = {
         "predicted_direction": baseline_direction,
-        "development_direction_counts": direction_counts,
-        "signals_tested": len(holdout_trades),
-        "accuracy_pct": round(baseline_hits / len(holdout_trades) * 100.0, 2)
-        if holdout_trades and baseline_direction else None,
-        "method": "Most common realised direction among development-period strategy signals, frozen before holdout.",
+        "development_direction_counts": development_direction_counts,
+        "decision_points_tested": holdout_opportunities,
+        "accuracy_pct": round(baseline_hits / holdout_opportunities * 100.0, 2)
+        if holdout_opportunities and baseline_direction else None,
+        "strategy_signal_dates_tested": len(holdout_trades),
+        "accuracy_on_strategy_signal_dates_pct": round(
+            baseline_on_signal_dates / len(holdout_trades) * 100.0, 2
+        ) if holdout_trades and baseline_direction else None,
+        "holdout_direction_counts": holdout_direction_counts,
+        "method": "Most common realised direction across all eligible development decision bars, frozen before holdout; scored across all eligible holdout decision bars.",
     }
     strategy_accuracy = holdout.get("accuracy_pct")
     baseline_accuracy = holdout_baseline["accuracy_pct"]
@@ -344,7 +363,7 @@ def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, hold
         "untouched_holdout": holdout,
         "holdout_majority_baseline": holdout_baseline,
         "holdout_accuracy_minus_baseline_pct_points": holdout_vs_baseline,
-        "interpretation": "Judge generalisation using untouched_holdout and compare it with the development-only majority-direction baseline. Do not tune rules or select a horizon from this holdout.",
+        "interpretation": "Judge generalisation using untouched_holdout. The majority baseline is learned from all eligible development decision bars and scored on all eligible holdout decision bars; its separate strategy-signal-date score is for sample-matched context. Do not tune rules or select a horizon from this holdout.",
         "costs_included": False,
         "read_only": True,
         "execution_enabled": False,
