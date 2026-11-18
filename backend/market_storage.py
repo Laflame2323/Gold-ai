@@ -7,6 +7,7 @@ import os
 import math
 import hashlib
 import threading
+import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -40,14 +41,28 @@ def _read_supabase_rows(query):
             "Accept": "application/json",
         },
     )
-    try:
-        with urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise MarketStorageError("Could not read the private MT5 candle archive.") from exc
-    if not isinstance(payload, list):
-        raise MarketStorageError("Supabase returned an invalid MT5 candle response.")
-    return payload
+    last_error = "unknown read error"
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=18) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, list):
+                raise ValueError("Supabase returned a non-list candle response.")
+            return payload
+        except HTTPError as exc:
+            last_error = f"Supabase HTTP {exc.code}"
+            # Retry rate limits and transient server failures only.
+            if exc.code not in (429, 500, 502, 503, 504):
+                break
+            logging.warning("MT5_ARCHIVE_READ attempt %s/3 failed: %s", attempt + 1, last_error)
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            last_error = type(exc).__name__
+            logging.warning("MT5_ARCHIVE_READ attempt %s/3 failed: %s", attempt + 1, last_error)
+        if attempt < 2:
+            time.sleep(0.4 * (attempt + 1))
+    raise MarketStorageError(
+        f"Could not read the private MT5 candle archive after 3 attempts ({last_error})."
+    )
 
 
 def get_latest_mt5_source():
