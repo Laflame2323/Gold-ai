@@ -46,15 +46,19 @@ def _rsi(values, period=14):
 
 
 def _features(candles, index):
-    prefix = candles[:index + 1]
-    closes = [float(row["close"]) for row in prefix]
+    # A bounded 200-candle warm-up keeps the research endpoint responsive on
+    # small hosted instances while retaining enough history for EMA30/RSI14.
+    # The slice ends at the decision candle, so no future data can enter.
+    window_start = max(0, index - 199)
+    window = candles[window_start:index + 1]
+    closes = [float(row["close"]) for row in window]
     current = closes[-1]
     if current <= 0:
         raise ValueError("Candle prices must be positive.")
     def ret(period):
         return current / closes[-period - 1] - 1.0
     ema10, ema30 = _ema(closes, 10), _ema(closes, 30)
-    row = prefix[-1]
+    row = window[-1]
     candle_range = (float(row["high"]) - float(row["low"])) / current
     body = (float(row["close"]) - float(row["open"])) / current
     changes = [closes[i] / closes[i - 1] - 1.0 for i in range(len(closes) - 10, len(closes))]
@@ -65,7 +69,6 @@ def _features(candles, index):
         (_rsi(closes) - 50.0) / 50.0,
         candle_range, body, volatility,
     ]
-
 
 def _sigmoid(value):
     if value >= 0:
