@@ -40,6 +40,12 @@ class DirectionalBacktestTests(unittest.TestCase):
         if result["signals_tested"]:
             self.assertGreater(independent["signals_tested"], 0)
         self.assertTrue(result["overlapping_outcome_windows"])
+        first_trade = result["_trades"][0]
+        decision_index = first_trade["decision_index"]
+        source = trend_candles(240)
+        self.assertEqual(first_trade["entry_time"], source[decision_index + 1]["time"])
+        self.assertEqual(first_trade["entry_price"], source[decision_index + 1]["open"])
+        self.assertEqual(first_trade["exit_price"], source[decision_index + 5]["close"])
 
     def test_minimum_sample_requirement_counts_only_scoreable_decisions(self):
         too_short = run_directional_backtest(trend_candles(163), horizon=5)
