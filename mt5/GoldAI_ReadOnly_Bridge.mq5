@@ -23,8 +23,8 @@ int NextFrameIndex = 0;
 string JsonEscape(const string value)
 {
    string result = value;
-   StringReplace(result, "\\", "\\\\");
-   StringReplace(result, "\"", "\\\"");
+   StringReplace(result, "\", "\\\");
+   StringReplace(result, "\"", "\\"");
    return result;
 }
 
@@ -60,24 +60,24 @@ bool SendFrame(const int index)
    {
       int chunkCount = MathMin(chunkSize, copied - chunkStart);
       string body = "{";
-      body += "\\"broker_server\\":\\"" + broker + "\\",";
-      body += "\\"symbol\\":\\"" + symbol + "\\",";
-      body += "\\"timeframe\\":\\"" + FrameNames[index] + "\\",";
-      body += "\\"server_utc_offset_seconds\\":" + IntegerToString((int)offsetSeconds) + ",";
-      body += "\\"candles\\":[";
+      body += "\"broker_server\":\"" + broker + "\",";
+      body += "\"symbol\":\"" + symbol + "\",";
+      body += "\"timeframe\":\"" + FrameNames[index] + "\",";
+      body += "\"server_utc_offset_seconds\":" + IntegerToString((int)offsetSeconds) + ",";
+      body += "\"candles\":[";
    
       for(int i = chunkStart; i < chunkStart + chunkCount; i++)
       {
          if(i > chunkStart) body += ",";
          body += "{";
-         body += "\\"time\\":" + IntegerToString((long)rates[i].time) + ",";
-         body += "\\"open\\":" + DoubleToString(rates[i].open, _Digits) + ",";
-         body += "\\"high\\":" + DoubleToString(rates[i].high, _Digits) + ",";
-         body += "\\"low\\":" + DoubleToString(rates[i].low, _Digits) + ",";
-         body += "\\"close\\":" + DoubleToString(rates[i].close, _Digits) + ",";
-         body += "\\"tick_volume\\":" + IntegerToString((long)rates[i].tick_volume) + ",";
-         body += "\\"real_volume\\":" + IntegerToString((long)rates[i].real_volume) + ",";
-         body += "\\"spread_points\\":" + IntegerToString((int)rates[i].spread);
+         body += "\"time\":" + IntegerToString((long)rates[i].time) + ",";
+         body += "\"open\":" + DoubleToString(rates[i].open, _Digits) + ",";
+         body += "\"high\":" + DoubleToString(rates[i].high, _Digits) + ",";
+         body += "\"low\":" + DoubleToString(rates[i].low, _Digits) + ",";
+         body += "\"close\":" + DoubleToString(rates[i].close, _Digits) + ",";
+         body += "\"tick_volume\":" + IntegerToString((long)rates[i].tick_volume) + ",";
+         body += "\"real_volume\":" + IntegerToString((long)rates[i].real_volume) + ",";
+         body += "\"spread_points\":" + IntegerToString((int)rates[i].spread);
          body += "}";
       }
       body += "]}";
@@ -93,7 +93,7 @@ bool SendFrame(const int index)
 
       char responseData[];
       string responseHeaders;
-      string headers = "Content-Type: application/json\\r\\nX-MT5-Token: " + IngestToken + "\\r\\n";
+      string headers = "Content-Type: application/json\r\nX-MT5-Token: " + IngestToken + "\r\n";
       ResetLastError();
       int httpStatus = WebRequest("POST", IngestURL, headers, RequestTimeoutMs,
                                  requestData, responseData, responseHeaders);
