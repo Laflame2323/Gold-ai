@@ -118,10 +118,17 @@ def _score(rows, labels, weights):
     accuracy = (tp + tn) / total * 100.0 if total else None
     recall_up = tp / (tp + fn) if tp + fn else 0.0
     recall_down = tn / (tn + fp) if tn + fp else 0.0
+    precision_up = tp / (tp + fp) if tp + fp else 0.0
+    precision_down = tn / (tn + fn) if tn + fn else 0.0
     return {
         "samples": total,
         "accuracy_pct": round(accuracy, 2) if accuracy is not None else None,
         "balanced_accuracy_pct": round((recall_up + recall_down) * 50.0, 2),
+        "precision": {"up": round(precision_up * 100.0, 2),
+                      "down": round(precision_down * 100.0, 2)},
+        "recall": {"up": round(recall_up * 100.0, 2),
+                   "down": round(recall_down * 100.0, 2)},
+        "prediction_counts": {"up": sum(predictions), "down": total - sum(predictions)},
         "confusion_matrix": {"true_up_pred_up": tp, "true_up_pred_down": fn,
                              "true_down_pred_up": fp, "true_down_pred_down": tn},
         "class_counts": {"up": sum(labels), "down": total - sum(labels)},
