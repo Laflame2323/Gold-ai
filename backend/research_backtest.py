@@ -169,6 +169,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         "status": "complete",
         "strategy": "EMA20/EMA50 trend + RSI14 + MACD histogram confirmation",
         "candle_count": len(normalized),
+        "required_candle_count": required_candles,
         "evaluated_decision_points": evaluated,
         "horizon_candles": horizon,
         "signals_tested": total,
