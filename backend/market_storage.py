@@ -33,18 +33,23 @@ def _read_supabase_rows(query):
     base_url, api_key = _supabase_credentials()
     if not base_url or not api_key:
         raise MarketStorageError("Supabase private credentials are not configured.")
-    request = Request(
-        f"{base_url}/rest/v1/market_candles?{query}",
-        headers={
-            "apikey": api_key,
-            "Authorization": f"Bearer {api_key}",
-            "Accept": "application/json",
-        },
-    )
+    headers = {
+        "apikey": api_key,
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+        "Connection": "close",
+    }
     last_error = "unknown read error"
-    for attempt in range(3):
+    # Render-to-Supabase connections have intermittently reset mid-request.
+    # Rebuild the HTTP request on every attempt and use bounded exponential backoff.
+    max_attempts = 5
+    for attempt in range(max_attempts):
         try:
-            with urlopen(request, timeout=18) as response:
+            request = Request(
+                f"{base_url}/rest/v1/market_candles?{query}",
+                headers=headers,
+            )
+            with urlopen(request, timeout=30) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if not isinstance(payload, list):
                 raise ValueError("Supabase returned a non-list candle response.")
@@ -54,14 +59,20 @@ def _read_supabase_rows(query):
             # Retry rate limits and transient server failures only.
             if exc.code not in (429, 500, 502, 503, 504):
                 break
-            logging.warning("MT5_ARCHIVE_READ attempt %s/3 failed: %s", attempt + 1, last_error)
+            logging.warning(
+                "MT5_ARCHIVE_READ attempt %s/%s failed: %s",
+                attempt + 1, max_attempts, last_error,
+            )
         except (URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
             last_error = type(exc).__name__
-            logging.warning("MT5_ARCHIVE_READ attempt %s/3 failed: %s", attempt + 1, last_error)
-        if attempt < 2:
-            time.sleep(0.4 * (attempt + 1))
+            logging.warning(
+                "MT5_ARCHIVE_READ attempt %s/%s failed: %s",
+                attempt + 1, max_attempts, last_error,
+            )
+        if attempt < max_attempts - 1:
+            time.sleep(min(0.75 * (2 ** attempt), 6.0))
     raise MarketStorageError(
-        f"Could not read the private MT5 candle archive after 3 attempts ({last_error})."
+        f"Could not read the private MT5 candle archive after {max_attempts} attempts ({last_error})."
     )
 
 
