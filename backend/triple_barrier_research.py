@@ -5,6 +5,7 @@ import math
 import numpy as np
 from multitimeframe_features import build_multitimeframe_features
 from research_ml import MIN_ROWS_PER_SPLIT
+from causal_smc_features import FEATURE_NAMES as SMC_FEATURE_NAMES, causal_smc_features
 
 
 BASE_INTERVALS = {"H1": 3600, "M30": 1800}
@@ -109,7 +110,7 @@ def _make_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, base_timeframe)
                 break
         else:
             counts["vertical_or_no_touch"] += 1
-        rows.append(item["features"])
+        rows.append(item["features"] + causal_smc_features(base, i, atr[i]))
         outcomes.append(outcome)
         sides.append(side)
         decisions.append(i)
@@ -203,7 +204,7 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
     primary_accuracy = sum(test_y) / len(test_y) * 100
     return {
         "status": "complete",
-        "model_type": f"atr_triple_barrier_{base_timeframe.lower()}_rule_side_meta_label_hist_gradient_boosting",
+        "model_type": f"atr_triple_barrier_{base_timeframe.lower()}_causal_smc_meta_label_hist_gradient_boosting",
         "base_timeframe": base_timeframe,
         "candidate_model_trained": True, "ai_trained": False,
         "production_model_persisted": False,
@@ -227,11 +228,14 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
         "selected_parameters": {"max_leaf_nodes": best["max_leaf_nodes"],
                                 "learning_rate": best["learning_rate"],
                                 "max_iter": 200, "class_weighting": "inverse_frequency"},
-        "feature_names": sample["aligned"]["feature_names"],
+        "feature_names": sample["aligned"]["feature_names"] + SMC_FEATURE_NAMES,
+        "feature_groups": {"existing_multi_timeframe": len(sample["aligned"]["feature_names"]),
+                           "causal_smc_price_action": len(SMC_FEATURE_NAMES)},
         "research_only": True, "read_only": True, "execution_enabled": False,
         "accuracy_is_live": False,
         "limitations": [
             f"Rule-side meta-labeling only; primary side is completed {base_timeframe} EMA10 trend.",
+            "SMC features are causal price-action proxies; they do not establish institutional order flow.",
             "No spread, commission, slippage or swap costs are included.",
             "Same-bar touches of both horizontal barriers are labeled neutral.",
             "Test is chronological but is not a newly collected future period.",
