@@ -105,7 +105,10 @@ class DirectionalBacktestTests(unittest.TestCase):
         self.assertFalse(result["costs_included"])
         baseline = result["holdout_majority_baseline"]
         self.assertEqual(baseline["predicted_direction"], "UP")
-        self.assertEqual(baseline["signals_tested"], result["untouched_holdout"]["signals_tested"])
+        self.assertEqual(baseline["decision_points_tested"], result["untouched_holdout"]["evaluated_decision_points"])
+        self.assertEqual(baseline["strategy_signal_dates_tested"], result["untouched_holdout"]["signals_tested"])
+        self.assertEqual(baseline["accuracy_on_strategy_signal_dates_pct"], 100.0)
+        self.assertEqual(baseline["accuracy_pct"], 100.0)
         self.assertEqual(result["holdout_accuracy_minus_baseline_pct_points"], 0.0)
 
     def test_backtest_can_start_scoring_after_indicator_warmup(self):
