@@ -33,6 +33,21 @@ class DirectionalBacktestTests(unittest.TestCase):
         self.assertIn("coverage_pct", result)
         self.assertEqual(result["signals_tested"], result["buy"]["signals"] + result["sell"]["signals"])
 
+    def test_minimum_sample_requirement_counts_only_scoreable_decisions(self):
+        too_short = run_directional_backtest(trend_candles(163), horizon=5)
+        self.assertEqual(too_short["status"], "insufficient_data")
+        self.assertEqual(too_short["required_candle_count"], 164)
+
+        exact = run_directional_backtest(trend_candles(164), horizon=5)
+        self.assertEqual(exact["status"], "complete")
+        self.assertEqual(exact["evaluated_decision_points"], 100)
+
+    def test_minimum_samples_must_be_positive_integer(self):
+        for invalid in (0, -1, True, 1.5):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    run_directional_backtest(trend_candles(240), minimum_samples=invalid)
+
     def test_non_increasing_timestamps_are_rejected(self):
         candles = trend_candles(120)
         candles[10]["time"] = candles[9]["time"]
