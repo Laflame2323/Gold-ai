@@ -168,16 +168,19 @@ def evaluate_logistic_research(candles, horizon=5):
         decision_indices.append(index)
 
     total = len(rows)
-    train_end = int(total * 0.70)
-    validation_end = int(total * 0.85)
-    # Remove samples whose forward-label windows could cross each split boundary.
-    train_stop = max(0, train_end - horizon)
-    validation_start = min(total, train_end + horizon)
-    validation_stop = max(validation_start, validation_end - horizon)
-    test_start = min(total, validation_end + horizon)
-    train_rows, train_labels = rows[:train_stop], labels[:train_stop]
-    validation_rows, validation_labels = rows[validation_start:validation_stop], labels[validation_start:validation_stop]
-    test_rows, test_labels = rows[test_start:], labels[test_start:]
+    # Split on original candle indices, not compressed sample positions. This
+    # keeps the purge valid even when flat outcomes were excluded.
+    train_boundary = int(len(normalized) * 0.70)
+    validation_boundary = int(len(normalized) * 0.85)
+    train_positions = [i for i, decision in enumerate(decision_indices)
+                       if decision < train_boundary - horizon]
+    validation_positions = [i for i, decision in enumerate(decision_indices)
+                            if train_boundary + horizon <= decision < validation_boundary - horizon]
+    test_positions = [i for i, decision in enumerate(decision_indices)
+                      if decision >= validation_boundary + horizon]
+    train_rows, train_labels = [rows[i] for i in train_positions], [labels[i] for i in train_positions]
+    validation_rows, validation_labels = [rows[i] for i in validation_positions], [labels[i] for i in validation_positions]
+    test_rows, test_labels = [rows[i] for i in test_positions], [labels[i] for i in test_positions]
     if min(len(train_rows), len(validation_rows), len(test_rows)) < MIN_ROWS_PER_SPLIT:
         return {
             "status": "insufficient_data", "candle_count": len(normalized),
