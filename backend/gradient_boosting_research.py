@@ -41,7 +41,7 @@ def _class_weights(labels):
     negatives = len(labels) - positives
     if not positives or not negatives:
         raise ValueError("Training block must contain both directions.")
-    return [len(labels) / (2 * (2 * positives if y else 2 * negatives)) for y in labels]
+    return [len(labels) / (2 * (positives if y else negatives)) for y in labels]
 
 
 def evaluate_gradient_boosting(candles_by_timeframe, horizon=5, min_move_pct=0.0):
