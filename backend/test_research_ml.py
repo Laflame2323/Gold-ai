@@ -58,6 +58,35 @@ class LogisticResearchTests(unittest.TestCase):
                             for fold in completed))
         self.assertIsNotNone(walk["mean_fold_balanced_accuracy_pct"])
 
+    def test_rejects_non_finite_prices(self):
+        candles = synthetic_candles()
+        candles[100]["close"] = float("nan")
+        with self.assertRaises(ValueError):
+            evaluate_logistic_research(candles)
+
+    def test_rejects_inconsistent_ohlc(self):
+        candles = synthetic_candles()
+        candles[100]["high"] = candles[100]["low"] - 1
+        with self.assertRaises(ValueError):
+            evaluate_logistic_research(candles)
+
+    def test_single_direction_training_block_does_not_train(self):
+        candles = []
+        price = 2000.0
+        for i in range(1400):
+            next_price = price + 0.2
+            candles.append({
+                "time": 1_700_000_000 + i * 60,
+                "open": price,
+                "high": next_price + 0.05,
+                "low": price - 0.05,
+                "close": next_price,
+            })
+            price = next_price
+        result = evaluate_logistic_research(candles, horizon=5)
+        self.assertEqual(result["status"], "insufficient_data")
+        self.assertFalse(result["ai_trained"])
+
     def test_rejects_non_increasing_time(self):
         candles = synthetic_candles()
         candles[100]["time"] = candles[99]["time"]
