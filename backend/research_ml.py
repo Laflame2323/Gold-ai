@@ -139,8 +139,9 @@ def _score(rows, labels, weights):
 def _walk_forward_evaluate(rows, labels, decision_indices, candle_count, horizon):
     """Expanding-window checks on development history; final holdout stays untouched."""
     folds = []
-    # Four sequential evaluation windows, each roughly 10% of the candle history.
-    boundaries = [int(candle_count * x) for x in (0.50, 0.60, 0.70, 0.80, 0.90)]
+    # Four sequential evaluation windows confined to the 70% development block.
+    # Validation (70-85%) and final test (85-100%) remain untouched by this tuning aid.
+    boundaries = [int(candle_count * x) for x in (0.30, 0.40, 0.50, 0.60, 0.70)]
     for fold_number, (train_end, test_end) in enumerate(zip(boundaries, boundaries[1:]), 1):
         train_pos = [i for i, d in enumerate(decision_indices) if d < train_end - horizon]
         test_pos = [i for i, d in enumerate(decision_indices)
