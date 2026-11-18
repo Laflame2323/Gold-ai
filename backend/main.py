@@ -725,6 +725,50 @@ def debug_build():
     }
 
 
+@app.get("/research/ml/evaluate-triple-barrier-mtf")
+def research_ml_evaluate_triple_barrier_mtf(
+    horizon: int = 12, pt_atr: float = 1.5, sl_atr: float = 1.0
+):
+    """Run ATR triple-barrier meta-label research on authenticated broker candles."""
+    from triple_barrier_research import evaluate_triple_barrier_meta
+
+    if horizon < 2 or horizon > 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 2 and 100 candles.")
+    if not math.isfinite(pt_atr) or not 0.1 <= pt_atr <= 10:
+        raise HTTPException(status_code=400, detail="pt_atr must be between 0.1 and 10.")
+    if not math.isfinite(sl_atr) or not 0.1 <= sl_atr <= 10:
+        raise HTTPException(status_code=400, detail="sl_atr must be between 0.1 and 10.")
+    try:
+        mt5_source = get_latest_mt5_source()
+        if not mt5_source:
+            raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
+        candles_by_timeframe = {}
+        for timeframe in ("H4", "H1", "M30", "M15"):
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], timeframe
+            )
+            if market.get("data_status") != "recent":
+                raise HTTPException(status_code=503, detail=f"{timeframe} archive is stale.")
+            candles_by_timeframe[timeframe] = market.get("candles") or []
+        result = evaluate_triple_barrier_meta(
+            candles_by_timeframe, horizon=horizon, pt_atr=pt_atr, sl_atr=sl_atr
+        )
+        return {
+            **result,
+            "symbol": mt5_source["symbol"],
+            "broker_source": mt5_source["source"],
+            "data_source": "Authenticated MT5 broker archive (read-only)",
+            "timeframe_data": {tf: {"count": len(candles_by_timeframe[tf])}
+                               for tf in candles_by_timeframe},
+            "research_only": True, "read_only": True,
+            "execution_enabled": False, "accuracy_is_live": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 @app.get("/research/ml/evaluate-gradient-boosting-mtf")
 def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: float = 0.0):
     """Run an isolated HistGradientBoosting candidate on aligned broker candles."""
