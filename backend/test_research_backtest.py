@@ -1,6 +1,6 @@
 import unittest
 
-from research_backtest import run_directional_backtest
+from research_backtest import run_directional_backtest, compare_directional_horizons
 
 
 def trend_candles(count=240, rising=True):
@@ -41,6 +41,22 @@ class DirectionalBacktestTests(unittest.TestCase):
         exact = run_directional_backtest(trend_candles(164), horizon=5)
         self.assertEqual(exact["status"], "complete")
         self.assertEqual(exact["evaluated_decision_points"], 100)
+
+    def test_horizon_comparison_reports_all_requested_horizons(self):
+        result = compare_directional_horizons(
+            trend_candles(300), horizons=(1, 3, 5, 10, 20), minimum_samples=100
+        )
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(
+            [row["horizon_candles"] for row in result["comparisons"]],
+            [1, 3, 5, 10, 20],
+        )
+        self.assertTrue(all(row["evaluated_decision_points"] >= 100 for row in result["comparisons"]))
+        self.assertFalse(result["execution_enabled"])
+
+    def test_horizon_comparison_rejects_duplicate_horizons(self):
+        with self.assertRaises(ValueError):
+            compare_directional_horizons(trend_candles(240), horizons=(1, 1))
 
     def test_minimum_samples_must_be_positive_integer(self):
         for invalid in (0, -1, True, 1.5):
