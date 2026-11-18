@@ -1,9 +1,9 @@
 """Leakage-aware directional research backtest for completed gold candles.
 
-Signals use only candles available at the decision close. Outcomes are measured
-over a fixed number of later candles. This is a research diagnostic, not a
-broker execution simulator; spreads, slippage, financing and intrabar paths
-are not modelled.
+Signals use only candles available at the decision close. Entries are priced
+at the next candle open, after the signal is knowable; exits use the close of
+the horizon candle. This remains a research diagnostic, not a broker execution
+simulator; spreads, slippage, financing and intrabar paths are not modelled.
 """
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         if previous_time is not None and timestamp <= previous_time:
             raise ValueError("Candles must be strictly ordered by increasing time.")
         previous_time = timestamp
-        normalized.append({"time": timestamp, "close": close})
+        normalized.append({"time": timestamp, "open": open_price, "close": close})
 
     if len(normalized) < required_candles:
         return {
@@ -132,7 +132,10 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         signal = _signal_for_prefix(prefix_closes)
         if signal == "WAIT":
             continue
-        entry = normalized[index]["close"]
+        # The signal is only knowable after this candle closes. Entering at
+        # that same close would introduce an optimistic timing assumption.
+        # Use the next candle's open, then the close horizon candles later.
+        entry = normalized[index + 1]["open"]
         exit_price = normalized[index + horizon]["close"]
         signed_return_pct = ((exit_price / entry) - 1.0) * 100.0
         if signal == "SELL":
@@ -141,8 +144,10 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         actual_direction = "UP" if raw_return_pct > 0 else "DOWN" if raw_return_pct < 0 else "FLAT"
         trades.append({
             "signal": signal,
-            "entry_time": normalized[index]["time"],
+            "entry_time": normalized[index + 1]["time"],
             "exit_time": normalized[index + horizon]["time"],
+            "entry_price": entry,
+            "exit_price": exit_price,
             "signed_return_pct": signed_return_pct,
             "actual_direction": actual_direction,
             "correct": signed_return_pct > 0,
@@ -212,7 +217,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         "sell": side_stats(sells),
         "limitations": [
             "Research-only directional test; no orders are placed.",
-            "Uses close-to-close outcomes over a fixed candle horizon.",
+            "Signals are decided at candle close; entry is next candle open and exit is the horizon candle close.",
             "Spread, commission, slippage, swaps and execution delays are excluded.",
             "Overlapping signal outcomes are allowed and are not independent samples.",
             "Historical results do not guarantee future performance.",
