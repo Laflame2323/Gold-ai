@@ -278,6 +278,7 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
         "purge_candles_each_boundary": horizon,
         "scaler_fit_on": "training block only",
         "walk_forward": walk,
+        "walk_forward_note": "Diagnostic fixed all-feature standard-logistic baseline; it is not the validation-selected final candidate reported in untouched_test.",
         "validation_ablation": ablation,
         "train": train_metrics,
         "validation": validation_metrics,
