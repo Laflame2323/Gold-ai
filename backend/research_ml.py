@@ -92,7 +92,7 @@ def _transform(rows, means, scales):
 
 
 def _fit_logistic(rows, labels, epochs=1200, learning_rate=0.04, l2=0.01, return_diagnostics=False):
-    """Vectorized batch logistic fit with a 1200-epoch ceiling and early stopping."""
+    """Vectorized batch logistic fit with full-objective convergence diagnostics."""
     import numpy as np
 
     features = np.asarray(rows, dtype=np.float64)
@@ -102,37 +102,68 @@ def _fit_logistic(rows, labels, epochs=1200, learning_rate=0.04, l2=0.01, return
     bias = 0.0
     stable_epochs = 0
     epochs_used = 0
-    max_gradient = None
+    checkpoints = {}
+    checkpoint_epochs = {1, 10, 50, 100, 250, 500, 1000, epochs}
 
-    for epoch in range(epochs):
-        epochs_used = epoch + 1
-        logits = bias + features @ coefficients
-        # Match _sigmoid's bounded exponent and avoid numerical overflow.
-        logits = np.clip(logits, -60.0, 60.0)
+    def objective_and_gradients(current_bias, current_coefficients):
+        logits = np.clip(current_bias + features @ current_coefficients, -60.0, 60.0)
         probabilities = 1.0 / (1.0 + np.exp(-logits))
         errors = probabilities - targets
         bias_gradient = float(np.mean(errors))
-        feature_gradients = (features.T @ errors) / count
+        data_gradients = (features.T @ errors) / count
+        regularized_gradients = data_gradients + l2 * current_coefficients
+        data_loss = float(np.mean(np.logaddexp(0.0, logits) - targets * logits))
+        penalty = float(0.5 * l2 * np.dot(current_coefficients, current_coefficients))
+        return (bias_gradient, data_gradients, regularized_gradients,
+                data_loss, penalty)
+
+    for epoch in range(epochs):
+        epochs_used = epoch + 1
+        (bias_gradient, data_gradients, regularized_gradients,
+         data_loss, penalty) = objective_and_gradients(bias, coefficients)
         max_gradient = max(
             abs(bias_gradient),
-            float(np.max(np.abs(feature_gradients))) if feature_gradients.size else 0.0,
+            float(np.max(np.abs(regularized_gradients))) if regularized_gradients.size else 0.0,
         )
-
         bias -= learning_rate * bias_gradient
-        coefficients -= learning_rate * (feature_gradients + l2 * coefficients)
+        coefficients -= learning_rate * regularized_gradients
 
-        # Keep the convergence rule; allow more iterations before declaring non-convergence.
+        if epochs_used in checkpoint_epochs:
+            (_, _, _, checkpoint_data_loss, checkpoint_penalty) = objective_and_gradients(bias, coefficients)
+            checkpoints[str(epochs_used)] = {
+                "data_loss": round(checkpoint_data_loss, 8),
+                "l2_penalty": round(checkpoint_penalty, 8),
+                "regularized_loss": round(checkpoint_data_loss + checkpoint_penalty, 8),
+            }
+
         stable_epochs = stable_epochs + 1 if max_gradient < 0.001 else 0
         if stable_epochs >= 8:
             break
 
+    (final_bias_gradient, final_data_gradients, final_regularized_gradients,
+     final_data_loss, final_penalty) = objective_and_gradients(bias, coefficients)
     weights = [float(bias), *[float(value) for value in coefficients]]
     if return_diagnostics:
+        data_max_gradient = (float(np.max(np.abs(final_data_gradients)))
+                             if final_data_gradients.size else 0.0)
+        regularized_max_gradient = (float(np.max(np.abs(final_regularized_gradients)))
+                                    if final_regularized_gradients.size else 0.0)
+        l2_max_gradient = (float(np.max(np.abs(l2 * coefficients)))
+                           if coefficients.size else 0.0)
         return weights, {
             "epochs_used": epochs_used,
             "epoch_limit": epochs,
-            "last_pre_update_max_gradient": round(float(max_gradient), 8) if max_gradient is not None else None,
-            "converged": stable_epochs >= 8,
+            "last_data_max_gradient": round(data_max_gradient, 8),
+            "last_regularized_max_gradient": round(regularized_max_gradient, 8),
+            "last_bias_gradient": round(abs(final_bias_gradient), 8),
+            "last_l2_max_gradient": round(l2_max_gradient, 8),
+            "final_data_loss": round(final_data_loss, 8),
+            "final_l2_penalty": round(final_penalty, 8),
+            "final_regularized_loss": round(final_data_loss + final_penalty, 8),
+            "loss_checkpoints": checkpoints,
+            "converged": stable_epochs >= 8 and max(
+                abs(final_bias_gradient), regularized_max_gradient
+            ) < 0.001,
             "bias": round(float(bias), 8),
             "coefficients": {name: round(float(value), 8) for name, value in zip(FEATURE_NAMES, coefficients)},
         }
