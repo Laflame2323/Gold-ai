@@ -184,6 +184,9 @@ def research_backtest(timeframe: str = "H1", horizon: int = 5):
             "timeframe": selected_timeframe,
             "data_source": source_label,
             "broker_source": broker_source,
+            "model_type": "rule_based_research_baseline",
+            "ai_trained": False,
+            "accuracy_is_live": False,
             "read_only": True,
             "execution_enabled": False,
         }
