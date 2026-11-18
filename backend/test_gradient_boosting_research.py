@@ -51,19 +51,19 @@ class GradientBoostingResearchTests(unittest.TestCase):
         result = evaluate_triple_barrier_meta(history(), horizon=12)
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["model_type"],
-                         "atr_triple_barrier_rule_side_meta_label_hist_gradient_boosting")
+                         "atr_triple_barrier_m30_rule_side_meta_label_hist_gradient_boosting")
         self.assertGreaterEqual(result["split_samples"]["train"], 50)
         self.assertGreaterEqual(result["split_samples"]["validation"], 50)
         self.assertGreaterEqual(result["split_samples"]["test"], 50)
         self.assertEqual(len(result["validation_candidates"]), 6)
-        self.assertIn("primary_test_meta_label_win_rate_pct", result)
+        self.assertEqual(result["base_timeframe"], "M30")\n        self.assertIn("primary_test_meta_label_win_rate_pct", result)
         self.assertEqual(len(result["confidence_coverage"]), 6)
         self.assertTrue(result["research_only"])
         self.assertTrue(result["read_only"])
         self.assertFalse(result["execution_enabled"])
         self.assertFalse(result["ai_trained"])
 
-    def test_triple_barrier_rejects_invalid_horizon(self):
+    def test_triple_barrier_supports_h1_comparison(self):\n        result = evaluate_triple_barrier_meta(history(), horizon=12, base_timeframe="H1")\n        self.assertEqual(result["status"], "complete")\n        self.assertEqual(result["base_timeframe"], "H1")\n\n    def test_triple_barrier_rejects_invalid_horizon(self):
         with self.assertRaises(ValueError):
             evaluate_triple_barrier_meta(history(), horizon=1)
 
