@@ -238,6 +238,64 @@ def research_backtest_compare(timeframe: str = "H1"):
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@app.get("/research/backtest/holdout")
+def research_backtest_holdout(
+    timeframe: str = "H1",
+    horizon: int = 5,
+    holdout_fraction: float = 0.25,
+):
+    """Evaluate the fixed research rule on a later chronological holdout."""
+    from research_backtest import chronological_holdout_backtest
+
+    selected_timeframe = timeframe.upper()
+    supported = {"M1", "M5", "M15", "M30", "H1", "H4"}
+    if selected_timeframe not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported timeframe. Use M1, M5, M15, M30, H1 or H4.",
+        )
+    if horizon < 1 or horizon > 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
+    if not 0.1 <= holdout_fraction <= 0.5:
+        raise HTTPException(status_code=400, detail="holdout_fraction must be between 0.1 and 0.5.")
+
+    try:
+        mt5_source = get_latest_mt5_source()
+        if mt5_source:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], selected_timeframe
+            )
+            source_label = "Authenticated MT5 broker archive (read-only)"
+            symbol = mt5_source["symbol"]
+            broker_source = mt5_source["source"]
+        else:
+            market = get_market_candles(selected_timeframe)
+            source_label = "XAUS reference-market feed (not broker execution prices)"
+            symbol = market.get("symbol", "XAUUSD")
+            broker_source = None
+
+        result = chronological_holdout_backtest(
+            market.get("candles") or [],
+            horizon=horizon,
+            holdout_fraction=holdout_fraction,
+        )
+        return {
+            **result,
+            "symbol": symbol,
+            "timeframe": selected_timeframe,
+            "data_source": source_label,
+            "broker_source": broker_source,
+            "read_only": True,
+            "execution_enabled": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.get("/research/cot")
 def gold_cot():
     """Return delayed official CFTC gold positioning and archive its weekly history."""
