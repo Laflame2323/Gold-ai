@@ -143,6 +143,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
             "exit_time": normalized[index + horizon]["time"],
             "signed_return_pct": signed_return_pct,
             "correct": signed_return_pct > 0,
+            "decision_index": index,
         })
 
     total = len(trades)
@@ -165,6 +166,26 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
 
     evaluated = max(0, len(normalized) - horizon - start_index)
     coverage = (total / evaluated * 100.0) if evaluated else 0.0
+
+    # A second view removes overlapping outcome windows. After a signal is
+    # selected, ignore any later signal until its fixed horizon has elapsed.
+    independent_trades = []
+    next_available_index = start_index
+    for trade in trades:
+        if trade["decision_index"] >= next_available_index:
+            independent_trades.append(trade)
+            next_available_index = trade["decision_index"] + horizon
+
+    independent_total = len(independent_trades)
+    independent_wins = sum(1 for trade in independent_trades if trade["correct"])
+    independent_accuracy = (
+        independent_wins / independent_total * 100.0
+        if independent_total else None
+    )
+    independent_avg_return = (
+        sum(trade["signed_return_pct"] for trade in independent_trades) / independent_total
+        if independent_total else None
+    )
     return {
         "status": "complete",
         "strategy": "EMA20/EMA50 trend + RSI14 + MACD histogram confirmation",
@@ -173,6 +194,13 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         "evaluated_decision_points": evaluated,
         "horizon_candles": horizon,
         "signals_tested": total,
+        "overlapping_outcome_windows": True,
+        "non_overlapping_check": {
+            "signals_tested": independent_total,
+            "accuracy_pct": round(independent_accuracy, 2) if independent_accuracy is not None else None,
+            "average_signed_return_pct": round(independent_avg_return, 4) if independent_avg_return is not None else None,
+            "method": "After selecting a signal, later signals are skipped until its outcome horizon ends.",
+        },
         "coverage_pct": round(coverage, 2),
         "accuracy_pct": round(accuracy, 2) if accuracy is not None else None,
         "average_signed_return_pct": round(avg_return, 4) if avg_return is not None else None,
