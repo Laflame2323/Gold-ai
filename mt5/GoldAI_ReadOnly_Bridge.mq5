@@ -3,12 +3,13 @@
 // Add https://gold-ai-backend-p9el.onrender.com to MT5 WebRequest allowed URLs.
 
 #property strict
-#property version   "1.10"
+#property version   "1.20"
 #property description "Gold AI read-only candle uploader"
 
 input string IngestURL = "https://gold-ai-backend-p9el.onrender.com/broker/mt5/candles";
 input string IngestToken = "";
-input int    BarsToSend = 5000;
+input int    BarsToSend = 10000;
+input int    UploadChunkSize = 5000;
 input int    LiveBarsToSend = 100;
 input int    TimerSeconds = 10;
 input int    RequestTimeoutMs = 60000;
@@ -38,7 +39,7 @@ bool SendFrame(const int index)
    MqlRates rates[];
    ArraySetAsSeries(rates, false);
    bool initialHistory = !HistoryLoaded[index];
-   int requested = MathMax(60, MathMin(initialHistory ? BarsToSend : LiveBarsToSend, 5000));
+   int requested = MathMax(60, MathMin(initialHistory ? BarsToSend : LiveBarsToSend, 10000));
    int copied = CopyRates(_Symbol, Frames[index], 1, requested, rates);
    if(copied < 60)
    {
@@ -54,50 +55,57 @@ bool SendFrame(const int index)
    string broker = JsonEscape(AccountInfoString(ACCOUNT_SERVER));
    string symbol = JsonEscape(_Symbol);
 
-   string body = "{";
-   body += "\"broker_server\":\"" + broker + "\",";
-   body += "\"symbol\":\"" + symbol + "\",";
-   body += "\"timeframe\":\"" + FrameNames[index] + "\",";
-   body += "\"server_utc_offset_seconds\":" + IntegerToString((int)offsetSeconds) + ",";
-   body += "\"candles\":[";
-
-   for(int i = 0; i < copied; i++)
+   int chunkSize = MathMax(60, MathMin(UploadChunkSize, 5000));
+   for(int chunkStart = 0; chunkStart < copied; chunkStart += chunkSize)
    {
-      if(i > 0) body += ",";
-      body += "{";
-      body += "\"time\":" + IntegerToString((long)rates[i].time) + ",";
-      body += "\"open\":" + DoubleToString(rates[i].open, _Digits) + ",";
-      body += "\"high\":" + DoubleToString(rates[i].high, _Digits) + ",";
-      body += "\"low\":" + DoubleToString(rates[i].low, _Digits) + ",";
-      body += "\"close\":" + DoubleToString(rates[i].close, _Digits) + ",";
-      body += "\"tick_volume\":" + IntegerToString((long)rates[i].tick_volume) + ",";
-      body += "\"real_volume\":" + IntegerToString((long)rates[i].real_volume) + ",";
-      body += "\"spread_points\":" + IntegerToString((int)rates[i].spread);
-      body += "}";
-   }
-   body += "]}";
+      int chunkCount = MathMin(chunkSize, copied - chunkStart);
+      string body = "{";
+      body += "\\"broker_server\\":\\"" + broker + "\\",";
+      body += "\\"symbol\\":\\"" + symbol + "\\",";
+      body += "\\"timeframe\\":\\"" + FrameNames[index] + "\\",";
+      body += "\\"server_utc_offset_seconds\\":" + IntegerToString((int)offsetSeconds) + ",";
+      body += "\\"candles\\":[";
+   
+      for(int i = chunkStart; i < chunkStart + chunkCount; i++)
+      {
+         if(i > chunkStart) body += ",";
+         body += "{";
+         body += "\\"time\\":" + IntegerToString((long)rates[i].time) + ",";
+         body += "\\"open\\":" + DoubleToString(rates[i].open, _Digits) + ",";
+         body += "\\"high\\":" + DoubleToString(rates[i].high, _Digits) + ",";
+         body += "\\"low\\":" + DoubleToString(rates[i].low, _Digits) + ",";
+         body += "\\"close\\":" + DoubleToString(rates[i].close, _Digits) + ",";
+         body += "\\"tick_volume\\":" + IntegerToString((long)rates[i].tick_volume) + ",";
+         body += "\\"real_volume\\":" + IntegerToString((long)rates[i].real_volume) + ",";
+         body += "\\"spread_points\\":" + IntegerToString((int)rates[i].spread);
+         body += "}";
+      }
+      body += "]}";
 
-   char requestData[];
-   int bytes = StringToCharArray(body, requestData, 0, WHOLE_ARRAY, CP_UTF8);
-   if(bytes <= 1)
-   {
-      Print("Gold AI: could not encode ", FrameNames[index], " payload.");
-      return false;
-   }
-   ArrayResize(requestData, bytes - 1);
+      char requestData[];
+      int bytes = StringToCharArray(body, requestData, 0, WHOLE_ARRAY, CP_UTF8);
+      if(bytes <= 1)
+      {
+         Print("Gold AI: could not encode ", FrameNames[index], " upload chunk.");
+         return false;
+      }
+      ArrayResize(requestData, bytes - 1);
 
-   char responseData[];
-   string responseHeaders;
-   string headers = "Content-Type: application/json\r\nX-MT5-Token: " + IngestToken + "\r\n";
-   ResetLastError();
-   int httpStatus = WebRequest("POST", IngestURL, headers, RequestTimeoutMs,
-                              requestData, responseData, responseHeaders);
-   if(httpStatus != 200)
-   {
-      Print("Gold AI: ", FrameNames[index], " upload failed. HTTP=", httpStatus,
-            " MT5 error=", GetLastError(), " Response=",
-            CharArrayToString(responseData, 0, -1, CP_UTF8));
-      return false;
+      char responseData[];
+      string responseHeaders;
+      string headers = "Content-Type: application/json\\r\\nX-MT5-Token: " + IngestToken + "\\r\\n";
+      ResetLastError();
+      int httpStatus = WebRequest("POST", IngestURL, headers, RequestTimeoutMs,
+                                 requestData, responseData, responseHeaders);
+      if(httpStatus != 200)
+      {
+         Print("Gold AI: ", FrameNames[index], " upload chunk failed. HTTP=", httpStatus,
+               " MT5 error=", GetLastError(), " Response=",
+               CharArrayToString(responseData, 0, -1, CP_UTF8));
+         return false;
+      }
+      Print("Gold AI: uploaded ", chunkCount, " ", FrameNames[index],
+            " candles in history batch starting at ", chunkStart, ".");
    }
 
    LastSentBar[index] = newestClosed;
@@ -113,8 +121,8 @@ int OnInit()
    if(StringLen(IngestToken) < 24)
       Print("Gold AI: configure the private ingestion token in EA inputs before use.");
    EventSetTimer(MathMax(5, TimerSeconds));
-   Print("Gold AI read-only bridge started for ", _Symbol,
-         ". It sends completed candles only and does not trade.");
+   Print("Gold AI read-only bridge v1.20 started for ", _Symbol,
+         ". It sends up to 10,000 completed candles per timeframe in batches of at most 5,000; it does not trade.");
    return INIT_SUCCEEDED;
 }
 
