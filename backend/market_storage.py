@@ -116,7 +116,11 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
     rows = []
     page_logger = logging.getLogger("uvicorn.error")
     archive_started = time.perf_counter()
-    for offset in range(0, 10000, 1000):
+    # Retain up to 50,000 verified broker candles per timeframe. The previous
+    # 10,000-row cap truncated short-timeframe history and limited MTF overlap.
+    # Keep 1,000-row pages to respect common Supabase PostgREST response limits.
+    max_archive_candles = 50000
+    for offset in range(0, max_archive_candles, 1000):
         page_started = time.perf_counter()
         page = _read_supabase_rows(urlencode({**base_params, "offset": str(offset)}))
         page_logger.info(
