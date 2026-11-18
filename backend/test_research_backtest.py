@@ -1,6 +1,9 @@
 import unittest
 
-from research_backtest import (\n    run_directional_backtest, compare_directional_horizons,\n    chronological_holdout_backtest,\n)
+from research_backtest import (
+    run_directional_backtest, compare_directional_horizons,
+    chronological_holdout_backtest,
+)
 
 
 def trend_candles(count=240, rising=True):
