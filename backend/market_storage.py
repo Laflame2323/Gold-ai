@@ -114,11 +114,23 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
     # Supabase projects commonly cap one REST response at 1,000 rows.
     # Page explicitly so backtests can read the full retained MT5 lookback.
     rows = []
+    page_logger = logging.getLogger("uvicorn.error")
+    archive_started = time.perf_counter()
     for offset in range(0, 5000, 1000):
+        page_started = time.perf_counter()
         page = _read_supabase_rows(urlencode({**base_params, "offset": str(offset)}))
+        page_logger.info(
+            "MT5_ARCHIVE_PAGE_DONE timeframe=%s offset=%s rows=%s elapsed_ms=%.1f archive_elapsed_ms=%.1f",
+            timeframe, offset, len(page), (time.perf_counter() - page_started) * 1000,
+            (time.perf_counter() - archive_started) * 1000,
+        )
         rows.extend(page)
         if len(page) < 1000:
             break
+    page_logger.info(
+        "MT5_ARCHIVE_FETCH_DONE timeframe=%s total_rows=%s elapsed_ms=%.1f",
+        timeframe, len(rows), (time.perf_counter() - archive_started) * 1000,
+    )
     candles_by_time = {}
     for row in rows:
         try:
