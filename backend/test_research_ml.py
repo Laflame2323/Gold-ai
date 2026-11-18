@@ -93,6 +93,20 @@ class LogisticResearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluate_logistic_research(candles)
 
+    def test_neutral_zone_filter_is_reported_and_reduces_samples(self):
+        candles = synthetic_candles()
+        unfiltered = evaluate_logistic_research(candles, horizon=5)
+        filtered = evaluate_logistic_research(candles, horizon=5, min_move_pct=0.01)
+        self.assertEqual(filtered["neutral_zone_min_move_pct"], 0.01)
+        self.assertGreaterEqual(filtered["excluded_small_move_outcomes"], 0)
+        self.assertLessEqual(filtered["eligible_samples"], unfiltered["eligible_samples"])
+
+    def test_rejects_invalid_neutral_zone(self):
+        for value in (-0.1, 10.1, float("nan"), float("inf"), True):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    evaluate_logistic_research(synthetic_candles(), min_move_pct=value)
+
     def test_rejects_invalid_horizon(self):
         for value in (0, 101, True):
             with self.subTest(value=value):
