@@ -75,11 +75,36 @@ def _walk_forward(rows, labels, decision_indices, candle_count, horizon):
 
 
 
+
+def _fit_balanced_logistic(rows, labels, epochs=1200, learning_rate=0.04, l2=0.01):
+    """Fit logistic regression with inverse-frequency class weights."""
+    import numpy as np
+
+    features = np.asarray(rows, dtype=np.float64)
+    targets = np.asarray(labels, dtype=np.float64)
+    positives = max(1, int(np.sum(targets == 1)))
+    negatives = max(1, int(np.sum(targets == 0)))
+    weights_by_class = {0.0: len(targets) / (2.0 * negatives),
+                        1.0: len(targets) / (2.0 * positives)}
+    sample_weights = np.asarray([weights_by_class[float(y)] for y in targets])
+    normalizer = float(np.sum(sample_weights))
+    coefficients = np.zeros(features.shape[1], dtype=np.float64)
+    bias = 0.0
+    for _ in range(epochs):
+        logits = np.clip(bias + features @ coefficients, -60.0, 60.0)
+        probabilities = 1.0 / (1.0 + np.exp(-logits))
+        errors = (probabilities - targets) * sample_weights
+        bias_gradient = float(np.sum(errors) / normalizer)
+        coefficient_gradient = (features.T @ errors) / normalizer + l2 * coefficients
+        bias -= learning_rate * bias_gradient
+        coefficients -= learning_rate * coefficient_gradient
+    return [float(bias), *[float(value) for value in coefficients]]
+
 def _validation_ablation(rows, labels, train_positions, validation_positions):
-    """Compare a small predeclared set of timeframe groups on validation only."""
+    """Select features and class weighting on validation only."""
     groups = {
-        "H4": list(range(0, 9)),
         "H1": list(range(9, 18)),
+        "H4": list(range(0, 9)),
         "M30": list(range(18, 27)),
         "M15": list(range(27, 36)),
     }
@@ -101,19 +126,22 @@ def _validation_ablation(rows, labels, train_positions, validation_positions):
         means, scales = _fit_scaler(train_rows)
         train_x = _transform(train_rows, means, scales)
         validation_x = _transform(validation_rows, means, scales)
-        weights = _fit_logistic(train_x, train_labels)
-        metrics = _score(validation_x, validation_labels, weights)
-        reports.append({
-            "candidate": name,
-            "timeframes": list(timeframes),
-            "feature_count": len(columns),
-            "validation": metrics,
-            "training_majority_baseline_accuracy_pct": round(baseline, 2),
-            "validation_accuracy_minus_baseline_pct_points": round(
-                metrics["accuracy_pct"] - baseline, 2
-            ),
-            "scaler_fit_on": "training block only",
-        })
+        for balanced in (False, True):
+            weights = (_fit_balanced_logistic(train_x, train_labels)
+                       if balanced else _fit_logistic(train_x, train_labels))
+            metrics = _score(validation_x, validation_labels, weights)
+            reports.append({
+                "candidate": name + ("_class_balanced" if balanced else "_standard"),
+                "timeframes": list(timeframes),
+                "feature_count": len(columns),
+                "class_weighting": "inverse_frequency" if balanced else "none",
+                "validation": metrics,
+                "training_majority_baseline_accuracy_pct": round(baseline, 2),
+                "validation_accuracy_minus_baseline_pct_points": round(
+                    metrics["accuracy_pct"] - baseline, 2
+                ),
+                "scaler_fit_on": "training block only",
+            })
     ranked = sorted(
         reports,
         key=lambda item: (
@@ -123,12 +151,16 @@ def _validation_ablation(rows, labels, train_positions, validation_positions):
         ),
         reverse=True,
     )
+    best = ranked[0]
     return {
         "selection_rule": "highest validation balanced accuracy; accuracy breaks ties; fewer features breaks remaining ties",
         "candidates": reports,
-        "best_validation_candidate": ranked[0]["candidate"],
-        "warning": "Exploratory validation-only comparison. Do not treat the best validation score as final out-of-sample accuracy; a new future holdout is required before promotion.",
+        "best_validation_candidate": best["candidate"],
+        "selected_timeframes": best["timeframes"],
+        "selected_class_weighting": best["class_weighting"],
+        "warning": "Exploratory validation-only model and feature selection. The test set is evaluated once using the selected candidate; future unseen data is still required before promotion.",
     }
+
 
 def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_pct=0.0):
     if isinstance(horizon, bool) or not isinstance(horizon, int) or not 1 <= horizon <= 100:
@@ -201,12 +233,24 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
     test_rows = [rows[i] for i in test_positions]
     test_labels = [labels[i] for i in test_positions]
 
+    ablation = _validation_ablation(rows, labels, train_positions, validation_positions)
+    timeframe_columns = {"H4": list(range(0, 9)), "H1": list(range(9, 18)),
+                         "M30": list(range(18, 27)), "M15": list(range(27, 36))}
+    selected_columns = [column for timeframe in ablation["selected_timeframes"]
+                        for column in timeframe_columns[timeframe]]
+    train_rows = [[row[column] for column in selected_columns] for row in train_rows]
+    validation_rows = [[row[column] for column in selected_columns] for row in validation_rows]
+    test_rows = [[row[column] for column in selected_columns] for row in test_rows]
     means, scales = _fit_scaler(train_rows)
     train_x = _transform(train_rows, means, scales)
     validation_x = _transform(validation_rows, means, scales)
     test_x = _transform(test_rows, means, scales)
-    weights = _fit_logistic(train_x, train_labels)
-    diagnostics = {"feature_count": len(aligned["feature_names"]),
+    balanced_selected = ablation["selected_class_weighting"] == "inverse_frequency"
+    weights = (_fit_balanced_logistic(train_x, train_labels)
+               if balanced_selected else _fit_logistic(train_x, train_labels))
+    diagnostics = {"feature_count": len(selected_columns),
+                   "selected_timeframes": ablation["selected_timeframes"],
+                   "selected_class_weighting": ablation["selected_class_weighting"],
                    "scaler_fit_on": "training block only"}
     train_metrics = _score(train_x, train_labels, weights)
     validation_metrics = _score(validation_x, validation_labels, weights)
@@ -216,16 +260,15 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
 
     # Development walk-forward evaluation uses the aligned rows and original H1 indices.
     walk = _walk_forward(rows, labels, decision_indices, candle_count, horizon)
-    ablation = _validation_ablation(rows, labels, train_positions, validation_positions)
     return {
         "status": "complete",
-        "model_type": "multi_timeframe_logistic_research_candidate",
+        "model_type": "validation_selected_logistic_research_candidate",
         "candidate_model_trained": True,
         "ai_trained": False,
         "production_model_persisted": False,
         "timeframes": aligned["timeframes"],
-        "feature_names": aligned["feature_names"],
-        "feature_count": len(aligned["feature_names"]),
+        "feature_names": [aligned["feature_names"][column] for column in selected_columns],
+        "feature_count": len(selected_columns),
         "feature_alignment": aligned["alignment_rule"],
         "horizon_candles": horizon,
         "neutral_zone_min_move_pct": float(min_move_pct),
