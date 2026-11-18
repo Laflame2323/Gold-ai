@@ -135,6 +135,52 @@ def _score(rows, labels, weights):
     }
 
 
+
+def _walk_forward_evaluate(rows, labels, decision_indices, candle_count, horizon):
+    """Expanding-window checks on development history; final holdout stays untouched."""
+    folds = []
+    # Four sequential evaluation windows, each roughly 10% of the candle history.
+    boundaries = [int(candle_count * x) for x in (0.50, 0.60, 0.70, 0.80, 0.90)]
+    for fold_number, (train_end, test_end) in enumerate(zip(boundaries, boundaries[1:]), 1):
+        train_pos = [i for i, d in enumerate(decision_indices) if d < train_end - horizon]
+        test_pos = [i for i, d in enumerate(decision_indices)
+                    if train_end + horizon <= d < test_end - horizon]
+        y_train = [labels[i] for i in train_pos]
+        y_test = [labels[i] for i in test_pos]
+        if len(train_pos) < MIN_ROWS_PER_SPLIT or len(test_pos) < MIN_ROWS_PER_SPLIT or len(set(y_train)) < 2:
+            folds.append({"fold": fold_number, "status": "insufficient_data",
+                          "train_samples": len(train_pos), "test_samples": len(test_pos)})
+            continue
+        train_rows = [rows[i] for i in train_pos]
+        test_rows = [rows[i] for i in test_pos]
+        means, scales = _fit_scaler(train_rows)
+        train_x = _transform(train_rows, means, scales)
+        test_x = _transform(test_rows, means, scales)
+        weights = _fit_logistic(train_x, y_train)
+        metrics = _score(test_x, y_test, weights)
+        majority = 1 if sum(y_train) >= len(y_train) / 2 else 0
+        baseline = sum(y == majority for y in y_test) / len(y_test) * 100.0
+        folds.append({
+            "fold": fold_number, "status": "complete",
+            "training_end_candle_index": train_end,
+            "test_end_candle_index_exclusive": test_end,
+            "train_samples": len(train_pos), "test_samples": len(test_pos),
+            "metrics": metrics,
+            "train_majority_baseline_accuracy_pct": round(baseline, 2),
+            "accuracy_minus_baseline_pct_points": round(metrics["accuracy_pct"] - baseline, 2),
+            "scaler_fit_on": "this fold's training block only",
+        })
+    completed = [fold for fold in folds if fold["status"] == "complete"]
+    return {
+        "method": "expanding training window with sequential purged test windows",
+        "completed_folds": len(completed),
+        "total_folds": len(folds),
+        "mean_fold_accuracy_pct": round(sum(x["metrics"]["accuracy_pct"] for x in completed) / len(completed), 2) if completed else None,
+        "mean_fold_balanced_accuracy_pct": round(sum(x["metrics"]["balanced_accuracy_pct"] for x in completed) / len(completed), 2) if completed else None,
+        "folds": folds,
+        "note": "These development folds are diagnostic; the separate untouched test block remains the final holdout.",
+    }
+
 def evaluate_logistic_research(candles, horizon=5):
     """Train on an early block and report later validation and test blocks."""
     if not isinstance(candles, list):
@@ -210,8 +256,10 @@ def evaluate_logistic_research(candles, horizon=5):
     test_metrics = _score(test_x, test_labels, weights)
     majority = 1 if sum(train_labels) >= len(train_labels) / 2 else 0
     baseline_accuracy = sum(y == majority for y in test_labels) / len(test_labels) * 100.0
+    walk_forward = _walk_forward_evaluate(rows, labels, decision_indices, len(normalized), horizon)
     return {
         "status": "complete",
+        "walk_forward": walk_forward,
         "model_type": "logistic_regression_research_candidate",
         "candidate_model_trained": True,
         "ai_trained": False,
