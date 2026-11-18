@@ -154,6 +154,12 @@ def build_multitimeframe_features(
             if source_index < 30:
                 ready = False
                 break
+            source_close_time = close_times[timeframe][source_index]
+            # Reject stale data gaps; the latest completed source candle must
+            # be no more than one source interval behind the decision time.
+            if decision_time - source_close_time >= TIMEFRAME_SECONDS[timeframe]:
+                ready = False
+                break
             values = _features(cleaned[timeframe], source_index)
             if values is None:
                 ready = False
