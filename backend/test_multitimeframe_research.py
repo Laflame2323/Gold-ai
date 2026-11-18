@@ -17,7 +17,7 @@ def candles(count, interval, start=1_700_000_000):
 
 
 def history():
-    return {"H4": candles(400, 14400), "H1": candles(1800, 3600),
+    return {"H4": candles(500, 14400), "H1": candles(1800, 3600),
             "M30": candles(3600, 1800), "M15": candles(7200, 900)}
 
 
