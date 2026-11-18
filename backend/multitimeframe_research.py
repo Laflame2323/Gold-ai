@@ -8,9 +8,64 @@ from __future__ import annotations
 
 from multitimeframe_features import build_multitimeframe_features, TIMEFRAME_SECONDS
 from research_ml import (
-    MIN_ROWS_PER_SPLIT, _fit_scaler, _transform, _fit_logistic, _score,
-    _confidence_coverage, _walk_forward_evaluate, _probability_summary,
+    MIN_ROWS_PER_SPLIT, _fit_logistic, _score,
+    _confidence_coverage, _probability_summary,
 )
+
+
+def _fit_scaler(rows):
+    width = len(rows[0])
+    means = [sum(row[j] for row in rows) / len(rows) for j in range(width)]
+    scales = []
+    for j, mean in enumerate(means):
+        variance = sum((row[j] - mean) ** 2 for row in rows) / len(rows)
+        scales.append(variance ** 0.5 or 1.0)
+    return means, scales
+
+
+def _transform(rows, means, scales):
+    return [[(row[j] - means[j]) / scales[j] for j in range(len(means))]
+            for row in rows]
+
+
+def _walk_forward(rows, labels, decision_indices, candle_count, horizon):
+    boundaries = [int(candle_count * fraction)
+                  for fraction in (0.30, 0.40, 0.50, 0.60, 0.70)]
+    folds = []
+    for number, (train_end, test_end) in enumerate(zip(boundaries, boundaries[1:]), 1):
+        train_pos = [i for i, d in enumerate(decision_indices) if d < train_end - horizon]
+        test_pos = [i for i, d in enumerate(decision_indices)
+                    if train_end + horizon <= d < test_end - horizon]
+        y_train = [labels[i] for i in train_pos]
+        y_test = [labels[i] for i in test_pos]
+        if min(len(train_pos), len(test_pos)) < MIN_ROWS_PER_SPLIT or len(set(y_train)) < 2:
+            folds.append({"fold": number, "status": "insufficient_data",
+                          "train_samples": len(train_pos), "test_samples": len(test_pos)})
+            continue
+        x_train = [rows[i] for i in train_pos]
+        x_test = [rows[i] for i in test_pos]
+        means, scales = _fit_scaler(x_train)
+        weights = _fit_logistic(_transform(x_train, means, scales), y_train)
+        metrics = _score(_transform(x_test, means, scales), y_test, weights)
+        majority = 1 if sum(y_train) >= len(y_train) / 2 else 0
+        baseline = sum(y == majority for y in y_test) / len(y_test) * 100
+        folds.append({
+            "fold": number, "status": "complete",
+            "training_end_candle_index": train_end,
+            "test_end_candle_index_exclusive": test_end,
+            "train_samples": len(train_pos), "test_samples": len(test_pos),
+            "metrics": metrics,
+            "train_majority_baseline_accuracy_pct": round(baseline, 2),
+            "accuracy_minus_baseline_pct_points": round(metrics["accuracy_pct"] - baseline, 2),
+            "scaler_fit_on": "this fold's training block only",
+        })
+    complete = [fold for fold in folds if fold["status"] == "complete"]
+    return {
+        "method": "expanding training window with sequential purged test windows",
+        "completed_folds": len(complete), "total_folds": len(folds), "folds": folds,
+        "mean_fold_accuracy_pct": round(sum(x["metrics"]["accuracy_pct"] for x in complete) / len(complete), 2) if complete else None,
+        "mean_fold_balanced_accuracy_pct": round(sum(x["metrics"]["balanced_accuracy_pct"] for x in complete) / len(complete), 2) if complete else None,
+    }
 
 
 def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_pct=0.0):
@@ -82,7 +137,9 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
     train_x = _transform(train_rows, means, scales)
     validation_x = _transform(validation_rows, means, scales)
     test_x = _transform(test_rows, means, scales)
-    weights, diagnostics = _fit_logistic(train_x, train_labels, return_diagnostics=True)
+    weights = _fit_logistic(train_x, train_labels)
+    diagnostics = {"feature_count": len(aligned["feature_names"]),
+                   "scaler_fit_on": "training block only"}
     train_metrics = _score(train_x, train_labels, weights)
     validation_metrics = _score(validation_x, validation_labels, weights)
     test_metrics = _score(test_x, test_labels, weights)
@@ -90,7 +147,7 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
     baseline = sum(label == majority for label in test_labels) / len(test_labels) * 100.0
 
     # Development walk-forward evaluation uses the aligned rows and original H1 indices.
-    walk = _walk_forward_evaluate(rows, labels, decision_indices, candle_count, horizon)
+    walk = _walk_forward(rows, labels, decision_indices, candle_count, horizon)
     return {
         "status": "complete",
         "model_type": "multi_timeframe_logistic_research_candidate",
