@@ -137,11 +137,14 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         signed_return_pct = ((exit_price / entry) - 1.0) * 100.0
         if signal == "SELL":
             signed_return_pct *= -1.0
+        raw_return_pct = ((exit_price / entry) - 1.0) * 100.0
+        actual_direction = "UP" if raw_return_pct > 0 else "DOWN" if raw_return_pct < 0 else "FLAT"
         trades.append({
             "signal": signal,
             "entry_time": normalized[index]["time"],
             "exit_time": normalized[index + horizon]["time"],
             "signed_return_pct": signed_return_pct,
+            "actual_direction": actual_direction,
             "correct": signed_return_pct > 0,
             "decision_index": index,
         })
@@ -194,6 +197,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         "evaluated_decision_points": evaluated,
         "horizon_candles": horizon,
         "signals_tested": total,
+        "trades": trades,
         "overlapping_outcome_windows": True,
         "non_overlapping_check": {
             "signals_tested": independent_total,
@@ -287,6 +291,37 @@ def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, hold
         start_index=split_index,
     )
     complete = development["status"] == "complete" and holdout["status"] == "complete"
+
+    # Learn a simple majority-direction benchmark from development signals only,
+    # then score that fixed direction on the untouched holdout signal dates.
+    development_trades = development.get("trades", [])
+    direction_counts = {
+        direction: sum(1 for trade in development_trades if trade.get("actual_direction") == direction)
+        for direction in ("UP", "DOWN", "FLAT")
+    }
+    baseline_direction = (
+        max(direction_counts, key=direction_counts.get)
+        if sum(direction_counts.values()) else None
+    )
+    holdout_trades = holdout.get("trades", [])
+    baseline_hits = (
+        sum(1 for trade in holdout_trades if trade.get("actual_direction") == baseline_direction)
+        if baseline_direction else 0
+    )
+    holdout_baseline = {
+        "predicted_direction": baseline_direction,
+        "development_direction_counts": direction_counts,
+        "signals_tested": len(holdout_trades),
+        "accuracy_pct": round(baseline_hits / len(holdout_trades) * 100.0, 2)
+        if holdout_trades and baseline_direction else None,
+        "method": "Most common realised direction among development-period strategy signals, frozen before holdout.",
+    }
+    strategy_accuracy = holdout.get("accuracy_pct")
+    baseline_accuracy = holdout_baseline["accuracy_pct"]
+    holdout_vs_baseline = (
+        round(strategy_accuracy - baseline_accuracy, 2)
+        if strategy_accuracy is not None and baseline_accuracy is not None else None
+    )
     return {
         "status": "complete" if complete else "insufficient_data",
         "strategy": "EMA20/EMA50 trend + RSI14 + MACD histogram confirmation",
@@ -302,7 +337,9 @@ def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, hold
         "split_time": candles[split_index]["time"] if split_index < len(candles) else None,
         "development": development,
         "untouched_holdout": holdout,
-        "interpretation": "Judge generalisation using untouched_holdout. Do not tune rules or select a horizon from this holdout.",
+        "holdout_majority_baseline": holdout_baseline,
+        "holdout_accuracy_minus_baseline_pct_points": holdout_vs_baseline,
+        "interpretation": "Judge generalisation using untouched_holdout and compare it with the development-only majority-direction baseline. Do not tune rules or select a horizon from this holdout.",
         "costs_included": False,
         "read_only": True,
         "execution_enabled": False,
