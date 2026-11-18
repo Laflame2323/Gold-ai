@@ -81,7 +81,7 @@ def _signal_for_prefix(closes):
     return "WAIT"
 
 
-def run_directional_backtest(candles, horizon=5, minimum_samples=100):
+def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_index=59):
     """Backtest a conservative EMA/RSI/MACD rule on ordered completed candles."""
     if not isinstance(candles, list):
         raise ValueError("candles must be a list")
@@ -89,9 +89,10 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
         raise ValueError("horizon must be an integer between 1 and 100")
     if isinstance(minimum_samples, bool) or not isinstance(minimum_samples, int) or minimum_samples < 1:
         raise ValueError("minimum_samples must be a positive integer")
-    # Decision indices start at 59 and end at len(candles) - horizon - 1.
-    # Require the requested number of genuinely scoreable decision points.
-    required_candles = 59 + minimum_samples + horizon
+    if isinstance(start_index, bool) or not isinstance(start_index, int) or start_index < 59:
+        raise ValueError("start_index must be an integer of at least 59")
+    # Score only decisions at/after start_index; earlier candles are indicator warm-up.
+    required_candles = start_index + minimum_samples + horizon
     normalized = []
     previous_time = None
     for candle in candles:
@@ -126,7 +127,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
     trades = []
     # The last horizon candles cannot be scored because their future outcome
     # is not yet present. The prefix ends at the decision candle.
-    for index in range(59, len(normalized) - horizon):
+    for index in range(start_index, len(normalized) - horizon):
         prefix_closes = [row["close"] for row in normalized[:index + 1]]
         signal = _signal_for_prefix(prefix_closes)
         if signal == "WAIT":
@@ -162,7 +163,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
             ) if count else None,
         }
 
-    evaluated = max(0, len(normalized) - horizon - 59)
+    evaluated = max(0, len(normalized) - horizon - start_index)
     coverage = (total / evaluated * 100.0) if evaluated else 0.0
     return {
         "status": "complete",
@@ -224,6 +225,51 @@ def compare_directional_horizons(candles, horizons=(1, 3, 5, 10, 20), minimum_sa
             "Do not choose a horizon from this same sample and report it as independent performance. "
             "Confirm any candidate on a later untouched chronological holdout and include trading costs."
         ),
+        "read_only": True,
+        "execution_enabled": False,
+    }
+
+
+def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, holdout_fraction=0.25):
+    """Evaluate a fixed rule on a later chronological holdout, without tuning on it.
+
+    The holdout's first decision uses earlier candles only as indicator warm-up.
+    Development outcomes are truncated before the holdout boundary, so no
+    development outcome crosses into the holdout period.
+    """
+    if not isinstance(candles, list):
+        raise ValueError("candles must be a list")
+    if isinstance(holdout_fraction, bool) or not isinstance(holdout_fraction, (int, float)) or not 0.1 <= holdout_fraction <= 0.5:
+        raise ValueError("holdout_fraction must be between 0.1 and 0.5")
+    split_index = int(len(candles) * (1.0 - holdout_fraction))
+    if split_index < 59:
+        return {
+            "status": "insufficient_data",
+            "split_index": split_index,
+            "message": "More candles are required for a chronological holdout.",
+            "read_only": True,
+            "execution_enabled": False,
+        }
+    development = run_directional_backtest(
+        candles[:split_index], horizon=horizon, minimum_samples=minimum_samples
+    )
+    holdout = run_directional_backtest(
+        candles, horizon=horizon, minimum_samples=minimum_samples,
+        start_index=split_index,
+    )
+    complete = development["status"] == "complete" and holdout["status"] == "complete"
+    return {
+        "status": "complete" if complete else "insufficient_data",
+        "strategy": "EMA20/EMA50 trend + RSI14 + MACD histogram confirmation",
+        "candle_count": len(candles),
+        "development_candles": split_index,
+        "holdout_candles": len(candles) - split_index,
+        "holdout_fraction": round(holdout_fraction, 3),
+        "split_time": candles[split_index]["time"] if split_index < len(candles) else None,
+        "development": development,
+        "untouched_holdout": holdout,
+        "interpretation": "Judge generalisation using untouched_holdout. Do not tune rules or select a horizon from this holdout.",
+        "costs_included": False,
         "read_only": True,
         "execution_enabled": False,
     }
