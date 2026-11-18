@@ -91,17 +91,6 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
         raise ValueError("minimum_samples must be a positive integer")
     # Decision indices start at 59 and end at len(candles) - horizon - 1.
     # Require the requested number of genuinely scoreable decision points.
-    required_candles = 59 + minimum_samples + horizon
-    if len(candles) < required_candles:
-        return {
-            "status": "insufficient_data",
-            "candle_count": len(candles),
-            "horizon_candles": horizon,
-            "minimum_evaluated_decision_points": minimum_samples,
-            "required_candle_count": required_candles,
-            "message": "More completed historical candles are required before testing.",
-        }
-
     normalized = []
     previous_time = None
     for candle in candles:
@@ -122,6 +111,16 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100):
             raise ValueError("Candles must be strictly ordered by increasing time.")
         previous_time = timestamp
         normalized.append({"time": timestamp, "close": close})
+
+    if len(normalized) < required_candles:
+        return {
+            "status": "insufficient_data",
+            "candle_count": len(normalized),
+            "horizon_candles": horizon,
+            "minimum_evaluated_decision_points": minimum_samples,
+            "required_candle_count": required_candles,
+            "message": "More completed historical candles are required before testing.",
+        }
 
     trades = []
     # The last horizon candles cannot be scored because their future outcome
