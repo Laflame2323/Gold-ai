@@ -742,11 +742,22 @@ def research_ml_evaluate_triple_barrier_mtf(
         mt5_source = get_latest_mt5_source()
         if not mt5_source:
             raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
+        timeframes = ("H4", "H1", "M30", "M15")
+        # Each timeframe may require many paged Supabase reads. Fetch the four
+        # independent histories concurrently to avoid serial archive timeouts.
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                timeframe: executor.submit(
+                    get_mt5_market_candles,
+                    mt5_source["symbol"], mt5_source["source"], timeframe
+                )
+                for timeframe in timeframes
+            }
+            markets = {timeframe: future.result()
+                       for timeframe, future in futures.items()}
         candles_by_timeframe = {}
-        for timeframe in ("H4", "H1", "M30", "M15"):
-            market = get_mt5_market_candles(
-                mt5_source["symbol"], mt5_source["source"], timeframe
-            )
+        for timeframe in timeframes:
+            market = markets[timeframe]
             if market.get("data_status") != "recent":
                 raise HTTPException(status_code=503, detail=f"{timeframe} archive is stale.")
             candles_by_timeframe[timeframe] = market.get("candles") or []
