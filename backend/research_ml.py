@@ -91,7 +91,7 @@ def _transform(rows, means, scales):
     return [[(row[j] - means[j]) / scales[j] for j in range(len(means))] for row in rows]
 
 
-def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01):
+def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01, return_diagnostics=False):
     """Vectorized batch logistic fit; preserves the existing update rule and epoch cap."""
     import numpy as np
 
@@ -101,8 +101,11 @@ def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01):
     coefficients = np.zeros(features.shape[1], dtype=np.float64)
     bias = 0.0
     stable_epochs = 0
+    epochs_used = 0
+    max_gradient = None
 
-    for _ in range(epochs):
+    for epoch in range(epochs):
+        epochs_used = epoch + 1
         logits = bias + features @ coefficients
         # Match _sigmoid's bounded exponent and avoid numerical overflow.
         logits = np.clip(logits, -60.0, 60.0)
@@ -123,7 +126,41 @@ def _fit_logistic(rows, labels, epochs=200, learning_rate=0.04, l2=0.01):
         if stable_epochs >= 8:
             break
 
-    return [float(bias), *[float(value) for value in coefficients]]
+    weights = [float(bias), *[float(value) for value in coefficients]]
+    if return_diagnostics:
+        return weights, {
+            "epochs_used": epochs_used,
+            "epoch_limit": epochs,
+            "last_pre_update_max_gradient": round(float(max_gradient), 8) if max_gradient is not None else None,
+            "converged": stable_epochs >= 8,
+            "bias": round(float(bias), 8),
+            "coefficients": {name: round(float(value), 8) for name, value in zip(FEATURE_NAMES, coefficients)},
+        }
+    return weights
+
+
+def _probability_summary(rows, weights):
+    probabilities = sorted(
+        _sigmoid(weights[0] + sum(w * x for w, x in zip(weights[1:], row)))
+        for row in rows
+    )
+    if not probabilities:
+        return {"samples": 0}
+    def percentile(fraction):
+        position = (len(probabilities) - 1) * fraction
+        lower = int(position)
+        upper = min(lower + 1, len(probabilities) - 1)
+        part = position - lower
+        return probabilities[lower] * (1.0 - part) + probabilities[upper] * part
+    return {
+        "samples": len(probabilities),
+        "mean": round(sum(probabilities) / len(probabilities), 6),
+        "min": round(probabilities[0], 6),
+        "p10": round(percentile(0.10), 6),
+        "median": round(percentile(0.50), 6),
+        "p90": round(percentile(0.90), 6),
+        "max": round(probabilities[-1], 6),
+    }
 
 
 def _score(rows, labels, weights):
@@ -339,7 +376,13 @@ def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
     train_x = _transform(train_rows, means, scales)
     validation_x = _transform(validation_rows, means, scales)
     test_x = _transform(test_rows, means, scales)
-    weights = _fit_logistic(train_x, train_labels)
+    weights, fit_diagnostics = _fit_logistic(train_x, train_labels, return_diagnostics=True)
+    probability_diagnostics = {
+        "train": _probability_summary(train_x, weights),
+        "validation": _probability_summary(validation_x, weights),
+        "untouched_test": _probability_summary(test_x, weights),
+        "note": "Probability summaries are descriptive only; validation and test were not used to fit or tune this candidate.",
+    }
     train_metrics = _score(train_x, train_labels, weights)
     validation_metrics = _score(validation_x, validation_labels, weights)
     test_metrics = _score(test_x, test_labels, weights)
@@ -368,6 +411,8 @@ def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
         "validation": validation_metrics,
         "untouched_test": test_metrics,
         "confidence_coverage": confidence_coverage,
+        "fit_diagnostics": fit_diagnostics,
+        "probability_diagnostics": probability_diagnostics,
         "test_majority_baseline_accuracy_pct": round(baseline_accuracy, 2),
         "test_accuracy_minus_baseline_pct_points": round(test_metrics["accuracy_pct"] - baseline_accuracy, 2),
         "limitations": ["Walk-forward folds are development diagnostics, not proof of future performance.",
