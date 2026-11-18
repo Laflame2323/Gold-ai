@@ -30,6 +30,10 @@ class MultiTimeframeResearchTests(unittest.TestCase):
         self.assertGreaterEqual(result["split_samples"]["validation"], 50)
         self.assertGreaterEqual(result["split_samples"]["test"], 50)
         self.assertIn("balanced_accuracy_pct", result["untouched_test"])
+        ablation = result["validation_ablation"]
+        self.assertEqual(len(ablation["candidates"]), 4)
+        self.assertIn(ablation["best_validation_candidate"], {item["candidate"] for item in ablation["candidates"]})
+        self.assertIn("validation-only", ablation["warning"])
         self.assertFalse(result["ai_trained"])
         self.assertFalse(result["execution_enabled"])
 
