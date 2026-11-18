@@ -23,8 +23,8 @@ int NextFrameIndex = 0;
 string JsonEscape(const string value)
 {
    string result = value;
-   StringReplace(result, "\", "\\\");
-   StringReplace(result, "\"", "\\"");
+   StringReplace(result, "\\", "\\\\");
+   StringReplace(result, "\"", "\\\"");
    return result;
 }
 
