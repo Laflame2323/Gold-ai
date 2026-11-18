@@ -197,7 +197,7 @@ def run_directional_backtest(candles, horizon=5, minimum_samples=100, start_inde
         "evaluated_decision_points": evaluated,
         "horizon_candles": horizon,
         "signals_tested": total,
-        "trades": trades,
+        "_trades": trades,
         "overlapping_outcome_windows": True,
         "non_overlapping_check": {
             "signals_tested": independent_total,
@@ -294,7 +294,7 @@ def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, hold
 
     # Learn a simple majority-direction benchmark from development signals only,
     # then score that fixed direction on the untouched holdout signal dates.
-    development_trades = development.get("trades", [])
+    development_trades = development.pop("_trades", [])
     direction_counts = {
         direction: sum(1 for trade in development_trades if trade.get("actual_direction") == direction)
         for direction in ("UP", "DOWN", "FLAT")
@@ -303,7 +303,7 @@ def chronological_holdout_backtest(candles, horizon=5, minimum_samples=100, hold
         max(direction_counts, key=direction_counts.get)
         if sum(direction_counts.values()) else None
     )
-    holdout_trades = holdout.get("trades", [])
+    holdout_trades = holdout.pop("_trades", [])
     baseline_hits = (
         sum(1 for trade in holdout_trades if trade.get("actual_direction") == baseline_direction)
         if baseline_direction else 0
