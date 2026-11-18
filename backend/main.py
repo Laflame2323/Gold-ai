@@ -399,6 +399,89 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
         raise
 
 
+@app.get("/research/ml/evaluate-mtf")
+def research_ml_evaluate_multitimeframe(horizon: int = 5, min_move_pct: float = 0.0):
+    """Evaluate the experimental H4/H1/M30/M15 candidate on one broker archive."""
+    from multitimeframe_research import evaluate_multitimeframe_research
+
+    if horizon < 1 or horizon > 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
+    if not math.isfinite(min_move_pct) or not 0 <= min_move_pct <= 10:
+        raise HTTPException(status_code=400, detail="min_move_pct must be between 0 and 10.")
+
+    request_started = time.perf_counter()
+    logger = logging.getLogger("uvicorn.error")
+    timeframes = ("H4", "H1", "M30", "M15")
+    try:
+        mt5_source = get_latest_mt5_source()
+        if not mt5_source:
+            raise HTTPException(
+                status_code=503,
+                detail="No authenticated MT5 broker archive is available; reference-feed data is not substituted.",
+            )
+
+        # Fetch the four verified broker histories concurrently. Each storage read
+        # retains its existing 10,000-candle cap and paginates in 1,000-row chunks.
+        markets = {}
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            jobs = {
+                executor.submit(
+                    get_mt5_market_candles,
+                    mt5_source["symbol"], mt5_source["source"], timeframe,
+                ): timeframe
+                for timeframe in timeframes
+            }
+            for job in as_completed(jobs):
+                timeframe = jobs[job]
+                markets[timeframe] = job.result()
+
+        candles_by_timeframe = {
+            timeframe: markets[timeframe].get("candles") or []
+            for timeframe in timeframes
+        }
+        data_summary = {
+            timeframe: {
+                "count": markets[timeframe].get("count", len(candles_by_timeframe[timeframe])),
+                "last_candle_at": markets[timeframe].get("last_candle_at"),
+                "data_status": markets[timeframe].get("data_status"),
+            }
+            for timeframe in timeframes
+        }
+        result = evaluate_multitimeframe_research(
+            candles_by_timeframe, horizon=horizon, min_move_pct=min_move_pct
+        )
+        logger.info(
+            "RESEARCH_MTF_EVAL_DONE elapsed_ms=%.1f status=%s counts=%s",
+            (time.perf_counter() - request_started) * 1000,
+            result.get("status"),
+            {tf: item["count"] for tf, item in data_summary.items()},
+        )
+        return {
+            **result,
+            "symbol": mt5_source["symbol"],
+            "broker_source": mt5_source["source"],
+            "data_source": "Authenticated MT5 broker archive (read-only)",
+            "timeframe_data": data_summary,
+            "accuracy_is_live": False,
+            "research_only": True,
+            "read_only": True,
+            "execution_enabled": False,
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        logger.exception("RESEARCH_MTF_STORAGE_ERROR")
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        logger.exception(
+            "RESEARCH_MTF_UNEXPECTED_ERROR elapsed_ms=%.1f",
+            (time.perf_counter() - request_started) * 1000,
+        )
+        raise
+
+
 @app.get("/research/cot")
 def gold_cot():
     """Return delayed official CFTC gold positioning and archive its weekly history."""
