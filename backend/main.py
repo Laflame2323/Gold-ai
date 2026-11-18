@@ -13,6 +13,8 @@ import json
 import hmac
 import math
 import os
+import logging
+import time
 from mt5_ingest import MT5Batch, archive_mt5_batch
 
 
@@ -316,8 +318,22 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
         )
     if horizon < 1 or horizon > 100:
         raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
+
+    request_started = time.perf_counter()
+    logger = logging.getLogger("gold_ai.research_ml")
+    logger.info(
+        "RESEARCH_EVAL_START timeframe=%s horizon=%s min_move_pct=%s",
+        selected_timeframe, horizon, min_move_pct,
+    )
     try:
+        stage_started = time.perf_counter()
         mt5_source = get_latest_mt5_source()
+        logger.info(
+            "RESEARCH_EVAL_SOURCE_LOOKUP_DONE elapsed_ms=%.1f mt5_source_found=%s",
+            (time.perf_counter() - stage_started) * 1000, bool(mt5_source),
+        )
+
+        stage_started = time.perf_counter()
         if mt5_source:
             market = get_mt5_market_candles(
                 mt5_source["symbol"], mt5_source["source"], selected_timeframe
@@ -330,9 +346,21 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
             source_label = "XAUS reference-market feed (not broker execution prices)"
             symbol = market.get("symbol", "XAUUSD")
             broker_source = None
+        candles = market.get("candles") or []
+        logger.info(
+            "RESEARCH_EVAL_CANDLE_FETCH_DONE elapsed_ms=%.1f candle_count=%s source=%s",
+            (time.perf_counter() - stage_started) * 1000, len(candles), source_label,
+        )
 
+        stage_started = time.perf_counter()
         result = evaluate_logistic_research(
-            market.get("candles") or [], horizon=horizon, min_move_pct=min_move_pct
+            candles, horizon=horizon, min_move_pct=min_move_pct
+        )
+        logger.info(
+            "RESEARCH_EVAL_MODEL_DONE elapsed_ms=%.1f total_elapsed_ms=%.1f status=%s",
+            (time.perf_counter() - stage_started) * 1000,
+            (time.perf_counter() - request_started) * 1000,
+            result.get("status"),
         )
         return {
             **result,
@@ -346,11 +374,29 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
             "execution_enabled": False,
         }
     except ValueError as exc:
+        logger.warning(
+            "RESEARCH_EVAL_VALIDATION_ERROR elapsed_ms=%.1f error=%s",
+            (time.perf_counter() - request_started) * 1000, exc,
+        )
         raise HTTPException(status_code=422, detail=str(exc))
     except MarketStorageError as exc:
+        logger.exception(
+            "RESEARCH_EVAL_STORAGE_ERROR elapsed_ms=%.1f",
+            (time.perf_counter() - request_started) * 1000,
+        )
         raise HTTPException(status_code=503, detail=str(exc))
     except MarketDataError as exc:
+        logger.exception(
+            "RESEARCH_EVAL_MARKET_ERROR elapsed_ms=%.1f",
+            (time.perf_counter() - request_started) * 1000,
+        )
         raise HTTPException(status_code=502, detail=str(exc))
+    except Exception:
+        logger.exception(
+            "RESEARCH_EVAL_UNEXPECTED_ERROR elapsed_ms=%.1f",
+            (time.perf_counter() - request_started) * 1000,
+        )
+        raise
 
 
 @app.get("/research/cot")
