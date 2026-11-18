@@ -1,6 +1,6 @@
 import unittest
 
-from research_backtest import run_directional_backtest, compare_directional_horizons
+from research_backtest import (\n    run_directional_backtest, compare_directional_horizons,\n    chronological_holdout_backtest,\n)
 
 
 def trend_candles(count=240, rising=True):
@@ -53,6 +53,35 @@ class DirectionalBacktestTests(unittest.TestCase):
         )
         self.assertTrue(all(row["evaluated_decision_points"] >= 100 for row in result["comparisons"]))
         self.assertFalse(result["execution_enabled"])
+
+    def test_chronological_holdout_scores_only_later_decisions(self):
+        candles = trend_candles(600)
+        result = chronological_holdout_backtest(
+            candles, horizon=5, minimum_samples=100, holdout_fraction=0.25
+        )
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["development_candles"], 450)
+        self.assertEqual(result["holdout_candles"], 150)
+        self.assertEqual(result["development"]["candle_count"], 450)
+        self.assertEqual(result["untouched_holdout"]["evaluated_decision_points"], 145)
+        self.assertEqual(result["untouched_holdout"]["required_candle_count"], 555)
+        self.assertFalse(result["execution_enabled"])
+        self.assertFalse(result["costs_included"])
+
+    def test_backtest_can_start_scoring_after_indicator_warmup(self):
+        result = run_directional_backtest(
+            trend_candles(300), horizon=5, minimum_samples=100, start_index=150
+        )
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["evaluated_decision_points"], 145)
+
+    def test_holdout_fraction_is_bounded(self):
+        for fraction in (0.0, 0.6, True):
+            with self.subTest(fraction=fraction):
+                with self.assertRaises(ValueError):
+                    chronological_holdout_backtest(
+                        trend_candles(300), holdout_fraction=fraction
+                    )
 
     def test_horizon_comparison_rejects_duplicate_horizons(self):
         with self.assertRaises(ValueError):
