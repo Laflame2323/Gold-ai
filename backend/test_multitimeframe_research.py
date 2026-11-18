@@ -25,15 +25,17 @@ class MultiTimeframeResearchTests(unittest.TestCase):
     def test_returns_chronological_research_metrics(self):
         result = evaluate_multitimeframe_research(history(), horizon=5)
         self.assertEqual(result["status"], "complete")
-        self.assertEqual(result["feature_count"], 36)
+        self.assertIn(result["feature_count"], {9, 18, 27, 36})
         self.assertGreaterEqual(result["split_samples"]["train"], 50)
         self.assertGreaterEqual(result["split_samples"]["validation"], 50)
         self.assertGreaterEqual(result["split_samples"]["test"], 50)
         self.assertIn("balanced_accuracy_pct", result["untouched_test"])
         ablation = result["validation_ablation"]
-        self.assertEqual(len(ablation["candidates"]), 4)
+        self.assertEqual(len(ablation["candidates"]), 8)
+        self.assertIn(ablation["selected_class_weighting"], {"none", "inverse_frequency"})
         self.assertIn(ablation["best_validation_candidate"], {item["candidate"] for item in ablation["candidates"]})
         self.assertIn("validation-only", ablation["warning"])
+        self.assertEqual(result["fit_diagnostics"]["selected_class_weighting"], ablation["selected_class_weighting"])
         self.assertFalse(result["ai_trained"])
         self.assertFalse(result["execution_enabled"])
 
