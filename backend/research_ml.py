@@ -182,6 +182,36 @@ def _walk_forward_evaluate(rows, labels, decision_indices, candle_count, horizon
         "note": "These development folds are diagnostic; the separate untouched test block remains the final holdout.",
     }
 
+
+def _confidence_coverage(rows, labels, weights, thresholds=(0.55, 0.60, 0.65, 0.70)):
+    """Evaluate only predictions whose probability is far enough from 0.5."""
+    probabilities = [
+        _sigmoid(weights[0] + sum(w * x for w, x in zip(weights[1:], row)))
+        for row in rows
+    ]
+    reports = []
+    total = len(labels)
+    for threshold in thresholds:
+        selected = [(p, y) for p, y in zip(probabilities, labels)
+                    if p >= threshold or p <= 1.0 - threshold]
+        correct = sum((p >= 0.5) == bool(y) for p, y in selected)
+        count = len(selected)
+        reports.append({
+            "confidence_threshold": threshold,
+            "selected_samples": count,
+            "coverage_pct": round(count / total * 100.0, 2) if total else 0.0,
+            "abstention_pct": round((total - count) / total * 100.0, 2) if total else 100.0,
+            "accuracy_pct": round(correct / count * 100.0, 2) if count else None,
+            "up_predictions": sum(p >= threshold for p, _ in selected),
+            "down_predictions": sum(p <= 1.0 - threshold for p, _ in selected),
+        })
+    return {
+        "method": "symmetric probability threshold; lower-confidence predictions abstain",
+        "total_test_samples": total,
+        "thresholds": reports,
+        "warning": "Higher confidence thresholds reduce coverage and do not guarantee higher future accuracy.",
+    }
+
 def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
     """Train on an early block and report later validation and test blocks.
 
@@ -264,6 +294,7 @@ def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
     train_metrics = _score(train_x, train_labels, weights)
     validation_metrics = _score(validation_x, validation_labels, weights)
     test_metrics = _score(test_x, test_labels, weights)
+    confidence_coverage = _confidence_coverage(test_x, test_labels, weights)
     majority = 1 if sum(train_labels) >= len(train_labels) / 2 else 0
     baseline_accuracy = sum(y == majority for y in test_labels) / len(test_labels) * 100.0
     walk_forward = _walk_forward_evaluate(rows, labels, decision_indices, len(normalized), horizon)
@@ -287,6 +318,7 @@ def evaluate_logistic_research(candles, horizon=5, min_move_pct=0.0):
         "train": train_metrics,
         "validation": validation_metrics,
         "untouched_test": test_metrics,
+        "confidence_coverage": confidence_coverage,
         "test_majority_baseline_accuracy_pct": round(baseline_accuracy, 2),
         "test_accuracy_minus_baseline_pct_points": round(test_metrics["accuracy_pct"] - baseline_accuracy, 2),
         "limitations": ["Walk-forward folds are development diagnostics, not proof of future performance.",
