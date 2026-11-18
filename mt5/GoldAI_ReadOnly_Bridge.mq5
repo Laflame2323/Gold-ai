@@ -8,7 +8,7 @@
 
 input string IngestURL = "https://gold-ai-backend-p9el.onrender.com/broker/mt5/candles";
 input string IngestToken = "";
-input int    BarsToSend = 10000;
+input int    BarsToSend = 50000;
 input int    UploadChunkSize = 5000;
 input int    LiveBarsToSend = 100;
 input int    TimerSeconds = 10;
@@ -39,7 +39,7 @@ bool SendFrame(const int index)
    MqlRates rates[];
    ArraySetAsSeries(rates, false);
    bool initialHistory = !HistoryLoaded[index];
-   int requested = MathMax(60, MathMin(initialHistory ? BarsToSend : LiveBarsToSend, 10000));
+   int requested = MathMax(60, MathMin(initialHistory ? BarsToSend : LiveBarsToSend, 50000));
    int copied = CopyRates(_Symbol, Frames[index], 1, requested, rates);
    if(copied < 60)
    {
@@ -122,7 +122,7 @@ int OnInit()
       Print("Gold AI: configure the private ingestion token in EA inputs before use.");
    EventSetTimer(MathMax(5, TimerSeconds));
    Print("Gold AI read-only bridge v1.20 started for ", _Symbol,
-         ". It sends up to 10,000 completed candles per timeframe in batches of at most 5,000; it does not trade.");
+         ". It sends up to 50,000 completed candles per timeframe in batches of at most 5,000; it does not trade.");
    return INIT_SUCCEEDED;
 }
 
