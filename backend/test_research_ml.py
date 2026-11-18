@@ -57,6 +57,12 @@ class LogisticResearchTests(unittest.TestCase):
         self.assertIsNotNone(coverage["brier_score"])
         self.assertGreaterEqual(coverage["brier_score"], 0)
         self.assertLessEqual(coverage["brier_score"], 1)
+        self.assertIsNotNone(coverage["expected_calibration_error"])
+        self.assertGreaterEqual(coverage["expected_calibration_error"], 0)
+        self.assertLessEqual(coverage["expected_calibration_error"], 1)
+        self.assertIsNotNone(coverage["max_calibration_error"])
+        self.assertGreaterEqual(coverage["max_calibration_error"], 0)
+        self.assertLessEqual(coverage["max_calibration_error"], 1)
         self.assertEqual(len(coverage["calibration_bins"]), 5)
         self.assertTrue(all(0 <= x["samples"] <= coverage["total_test_samples"]
                             for x in coverage["calibration_bins"]))
