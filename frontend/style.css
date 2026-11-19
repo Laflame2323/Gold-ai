@@ -480,3 +480,40 @@ body {
   .chart-wrap { height: 270px; }
   .nav-link { font-size: 8px; }
 }
+
+
+/* AI research and model evaluation workspace */
+.research-panel{margin-top:16px;padding:22px}
+.research-intro{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:12px}
+.research-intro strong{font-size:14px}
+.research-intro p{max-width:660px;margin:6px 0 0;color:var(--muted);font-size:11px;line-height:1.65}
+.research-run-button{width:auto;min-width:185px;padding:0 17px}
+.research-run-button:disabled{opacity:.65;cursor:wait}
+.research-state{margin-top:15px;padding:11px 13px;border:1px solid #344056;border-radius:9px;background:#0d1725;color:#c9d3e1;font-size:11px;line-height:1.6}
+.research-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}
+.research-metrics>div,.research-report>div{display:flex;flex-direction:column;gap:7px;min-width:0;padding:13px;border:1px solid #29384c;border-radius:9px;background:#0e1725}
+.research-metrics span,.research-report span{color:#8290a5;font:8px var(--mono);letter-spacing:.65px;line-height:1.5}
+.research-metrics strong{font:600 22px var(--mono);color:#f0c56f;overflow-wrap:anywhere}
+.research-metrics small{color:#8290a5;font-size:9px;line-height:1.5}
+.research-report{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:9px}
+.research-report strong{color:#dce5f1;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.history-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:19px}
+.history-heading strong{font-size:12px}
+.history-heading span{color:#8290a5;font:8px var(--mono)}
+.research-history{margin-top:9px;overflow-x:auto;border:1px solid #29384c;border-radius:9px;background:#0d1522}
+.research-history>p{padding:13px;margin:0;color:#8290a5;font-size:10px}
+.research-history-table{width:100%;border-collapse:collapse;white-space:nowrap;text-align:left}
+.research-history-table th{padding:10px 12px;color:#8290a5;font:8px var(--mono);letter-spacing:.5px;border-bottom:1px solid #29384c}
+.research-history-table td{padding:10px 12px;color:#dce5f1;font:10px var(--mono);border-bottom:1px solid #202d40}
+.research-history-table tr:last-child td{border-bottom:0}
+.research-disclaimer{margin:13px 0 0;color:#a38a5b;font-size:9px;line-height:1.65}
+@media(max-width:760px){
+ .research-panel{padding:15px}
+ .research-intro{align-items:stretch;flex-direction:column;gap:12px}
+ .research-run-button{width:100%}
+ .research-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .research-report{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .research-metrics>div,.research-report>div{padding:10px}
+ .research-metrics strong{font-size:19px}
+ .history-heading{align-items:flex-start;flex-direction:column;gap:4px}
+}
