@@ -15,7 +15,7 @@ import math
 import os
 import logging
 import time
-from mt5_ingest import MT5Batch, archive_mt5_batch
+from mt5_ingest import MT5Batch, archive_mt5_batch, MT5TickBatch, archive_mt5_tick_batch
 
 
 app = FastAPI(
@@ -519,6 +519,37 @@ def ingest_mt5_candles(
         "symbol": payload.symbol,
         "timeframe": payload.timeframe,
         "broker_server": payload.broker_server,
+        "read_only": True,
+    }
+
+
+@app.post("/broker/mt5/ticks")
+def ingest_mt5_ticks(
+    payload: MT5TickBatch,
+    x_mt5_token: str | None = Header(default=None, alias="X-MT5-Token"),
+):
+    """Accept authenticated MT5 ticks into the isolated research archive."""
+    expected_token = os.getenv("MT5_INGEST_TOKEN", "")
+    if not expected_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Research MT5 tick ingestion is locked until MT5_INGEST_TOKEN is configured.",
+        )
+    if not x_mt5_token or not hmac.compare_digest(expected_token, x_mt5_token):
+        raise HTTPException(status_code=401, detail="Invalid MT5 ingestion token.")
+    try:
+        result = archive_mt5_tick_batch(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if result.get("status") != "saved":
+        raise HTTPException(status_code=503, detail="Research tick archive is unavailable.")
+    return {
+        "status": "saved",
+        "rows_sent": result.get("rows_sent", 0),
+        "symbol": payload.symbol,
+        "broker_server": payload.broker_server,
+        "data_type": "ticks",
+        "research_only": True,
         "read_only": True,
     }
 
