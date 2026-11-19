@@ -1,12 +1,15 @@
 """Research-only Dukascopy XAUUSD M1 BID/ASK downloader."""
 from __future__ import annotations
-import argparse, csv, hashlib, json, lzma, struct, urllib.error, urllib.request
-from datetime import date, datetime, time, timedelta, timezone
+import argparse, csv, hashlib, json, lzma, struct, time
+import urllib.error, urllib.request
+from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from pathlib import Path
 
 BASE_URL = "https://datafeed.dukascopy.com/datafeed"
 PRICE_SCALE = 1000.0
 RECORD = struct.Struct(">IIIIIf")
+RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+
 
 def decode_candle_file(payload: bytes, day: date) -> dict[int, dict]:
     if not payload:
@@ -14,7 +17,7 @@ def decode_candle_file(payload: bytes, day: date) -> dict[int, dict]:
     raw = lzma.decompress(payload, format=lzma.FORMAT_ALONE)
     if len(raw) % RECORD.size:
         raise ValueError("Decoded Dukascopy file has a partial candle record.")
-    midnight = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    midnight = datetime.combine(day, datetime_time.min, tzinfo=timezone.utc)
     result = {}
     for seconds, open_i, close_i, low_i, high_i, volume in RECORD.iter_unpack(raw):
         if seconds >= 86400:
@@ -25,6 +28,10 @@ def decode_candle_file(payload: bytes, day: date) -> dict[int, dict]:
             raise ValueError("Dukascopy candle contains invalid OHLC prices.")
         if volume < 0:
             raise ValueError("Dukascopy candle contains negative volume.")
+        # Dukascopy may fill closed minutes with a flat, zero-volume candle.
+        # These are not traded observations and should not enter model features.
+        if volume == 0 and op == cl == lo == hi:
+            continue
         stamp = int((midnight + timedelta(seconds=seconds)).timestamp())
         if stamp in result:
             raise ValueError("Dukascopy file contains duplicate timestamps.")
@@ -32,19 +39,31 @@ def decode_candle_file(payload: bytes, day: date) -> dict[int, dict]:
                          "volume": float(volume)}
     return result
 
-def fetch_side(day: date, side: str, timeout: int = 30):
+
+def fetch_side(day: date, side: str, timeout: int = 30, attempts: int = 4):
     if side not in {"BID", "ASK"}:
         raise ValueError("Price side must be BID or ASK.")
     url = (f"{BASE_URL}/XAUUSD/{day.year}/{day.month - 1:02d}/"
            f"{day.day:02d}/{side}_candles_min_1.bi5")
-    request = urllib.request.Request(url, headers={"User-Agent": "GoldAI-ResearchData/1.0"})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return decode_candle_file(response.read(), day)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return None
-        raise
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "GoldAI-ResearchData/1.0",
+        "Accept": "application/octet-stream",
+    })
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return decode_candle_file(response.read(), day)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            if exc.code not in RETRYABLE_HTTP or attempt == attempts - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+            if attempt == attempts - 1:
+                raise
+        time.sleep(min(2 ** attempt, 15))
+    raise RuntimeError("Dukascopy download exhausted retries.")
+
 
 def merge_bid_ask(bid: dict[int, dict], ask: dict[int, dict]):
     rows = []
@@ -62,6 +81,7 @@ def merge_bid_ask(bid: dict[int, dict], ask: dict[int, dict]):
         rows.append(row)
     return rows, len(bid_times - ask_times), len(ask_times - bid_times)
 
+
 def download_range(start: date, end: date, output_dir: Path):
     if end <= start:
         raise ValueError("End date must be later than start date (exclusive).")
@@ -71,7 +91,8 @@ def download_range(start: date, end: date, output_dir: Path):
     unmatched_bid = unmatched_ask = 0
     for offset in range((end - start).days):
         day = start + timedelta(days=offset)
-        bid, ask = fetch_side(day, "BID"), fetch_side(day, "ASK")
+        bid = fetch_side(day, "BID")
+        ask = fetch_side(day, "ASK")
         if not bid and not ask:
             missing.append(day.isoformat())
             continue
@@ -108,6 +129,7 @@ def download_range(start: date, end: date, output_dir: Path):
         json.dumps(metadata, indent=2), encoding="utf-8")
     return metadata
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", required=True, help="UTC YYYY-MM-DD")
@@ -116,6 +138,7 @@ def main():
     args = parser.parse_args()
     print(json.dumps(download_range(date.fromisoformat(args.start),
           date.fromisoformat(args.end), Path(args.output_dir)), indent=2))
+
 
 if __name__ == "__main__":
     main()
