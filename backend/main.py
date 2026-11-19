@@ -869,7 +869,8 @@ def research_ml_forward_test_triple_barrier_mtf(
         if not mt5_source:
             raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
         timeframes = ("H4", "H1", "M30", "M15")
-        timeframe_limits = {"H4": 1000, "H1": 3000, "M30": 6000, "M15": 12000}
+        # Compact aligned history keeps this interactive evaluation responsive.
+        timeframe_limits = {"H4": 500, "H1": 1500, "M30": 3000, "M15": 6000}
         candles_by_timeframe = {}
         timeframe_data = {}
         for timeframe in timeframes:
