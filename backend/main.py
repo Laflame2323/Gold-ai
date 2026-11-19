@@ -400,7 +400,9 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
 
 
 @app.get("/research/ml/evaluate-mtf")
-def research_ml_evaluate_multitimeframe(horizon: int = 5, min_move_pct: float = 0.0):
+def research_ml_evaluate_multitimeframe(
+    horizon: int = 5, min_move_pct: float = 0.0, archive_limit: int = 12000,
+):
     """Evaluate the experimental H4/H1/M30/M15 candidate on one broker archive."""
     from multitimeframe_research import evaluate_multitimeframe_research
 
@@ -408,6 +410,8 @@ def research_ml_evaluate_multitimeframe(horizon: int = 5, min_move_pct: float = 
         raise HTTPException(status_code=400, detail="horizon must be between 1 and 100 candles.")
     if not math.isfinite(min_move_pct) or not 0 <= min_move_pct <= 10:
         raise HTTPException(status_code=400, detail="min_move_pct must be between 0 and 10.")
+    if isinstance(archive_limit, bool) or not 1000 <= archive_limit <= 50000:
+        raise HTTPException(status_code=400, detail="archive_limit must be between 1,000 and 50,000.")
 
     request_started = time.perf_counter()
     logger = logging.getLogger("uvicorn.error")
@@ -428,6 +432,7 @@ def research_ml_evaluate_multitimeframe(horizon: int = 5, min_move_pct: float = 
                 executor.submit(
                     get_mt5_market_candles,
                     mt5_source["symbol"], mt5_source["source"], timeframe,
+                    max_candles=archive_limit,
                 ): timeframe
                 for timeframe in timeframes
             }
@@ -451,9 +456,9 @@ def research_ml_evaluate_multitimeframe(horizon: int = 5, min_move_pct: float = 
             candles_by_timeframe, horizon=horizon, min_move_pct=min_move_pct
         )
         logger.info(
-            "RESEARCH_MTF_EVAL_DONE elapsed_ms=%.1f status=%s counts=%s",
+            "RESEARCH_MTF_EVAL_DONE elapsed_ms=%.1f status=%s archive_limit=%s counts=%s",
             (time.perf_counter() - request_started) * 1000,
-            result.get("status"),
+            result.get("status"), archive_limit,
             {tf: item["count"] for tf, item in data_summary.items()},
         )
         return {
