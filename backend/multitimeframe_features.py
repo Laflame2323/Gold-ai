@@ -142,6 +142,7 @@ def build_multitimeframe_features(
     }
     names = _feature_names(selected)
     rows = []
+    feature_cache = {timeframe: {} for timeframe in selected}
     base_interval = TIMEFRAME_SECONDS[base_timeframe]
 
     for base_index, base_candle in enumerate(cleaned[base_timeframe]):
@@ -160,7 +161,10 @@ def build_multitimeframe_features(
             if decision_time - source_close_time >= TIMEFRAME_SECONDS[timeframe]:
                 ready = False
                 break
-            values = _features(cleaned[timeframe], source_index)
+            cache = feature_cache[timeframe]
+            if source_index not in cache:
+                cache[source_index] = _features(cleaned[timeframe], source_index)
+            values = cache[source_index]
             if values is None:
                 ready = False
                 break
