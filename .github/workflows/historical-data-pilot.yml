@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install data tools
-        run: pip install pandas pyarrow
+        run: pip install -r backend/requirements.txt pandas pyarrow
       - name: Download annual HistData XAUUSD M1 files
         run: |
           set -euo pipefail
@@ -149,6 +149,11 @@ jobs:
           (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
           print(json.dumps({k:v for k,v in manifest.items() if k != "files"}, indent=2))
           PY
+      - name: Train and evaluate research candidates on independent historical data
+        run: |
+          python backend/histdata_research_evaluation.py \
+            --input data/histdata_normalized/xauusd_histdata_m1_utc.parquet \
+            --output data/histdata_normalized/research_evaluation.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
