@@ -520,6 +520,9 @@ function renderResearchResult(data) {
   $("researchModelStatus").textContent = data.candidate_model_trained ? "Candidate trained · not deployed" : "Not trained";
   $("researchSource").textContent = data.data_source || "MT5 archive";
   $("researchTestStatus").textContent = data.status === "complete" ? "Untouched chronological test" : (data.status || "Incomplete");
+  $("researchTrainAccuracy").textContent = pct(data.train?.accuracy_pct);
+  $("researchValidationAccuracy").textContent = pct(data.validation?.accuracy_pct);
+  $("researchWalkForward").textContent = pct(data.walk_forward?.mean_fold_accuracy_pct);
   const warning = Number.isFinite(gap) && gap < 0
     ? "The candidate scored below the majority baseline on unseen test data. It should not be promoted."
     : "Review the untouched test, sample count and costs before drawing conclusions.";
