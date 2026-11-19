@@ -403,7 +403,7 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
 def research_ml_evaluate_multitimeframe(
     horizon: int = 5, min_move_pct: float = 0.0, archive_limit: int = 3000,
 ):
-    """Evaluate the experimental H4/H1/M30/M15 candidate on one broker archive."""
+    """Evaluate MTF research using an H1-equivalent history window."""
     from multitimeframe_research import evaluate_multitimeframe_research
 
     if horizon < 1 or horizon > 100:
@@ -424,13 +424,21 @@ def research_ml_evaluate_multitimeframe(
                 detail="No authenticated MT5 broker archive is available; reference-feed data is not substituted.",
             )
 
-        # Read histories sequentially on the 512 MB free instance to avoid
-        # four simultaneous Supabase responses exhausting memory.
+        # archive_limit is the H1 lookback. Scale each timeframe so the
+        # histories cover approximately the same calendar period. M15 used
+        # to be the bottleneck because every timeframe received the same count.
+        # Keep reads sequential on the 512 MB free instance.
+        timeframe_limits = {
+            "H4": min(50000, max(1000, (archive_limit + 3) // 4)),
+            "H1": archive_limit,
+            "M30": min(50000, archive_limit * 2),
+            "M15": min(50000, archive_limit * 4),
+        }
         markets = {}
         for timeframe in timeframes:
             markets[timeframe] = get_mt5_market_candles(
                 mt5_source["symbol"], mt5_source["source"], timeframe,
-                max_candles=archive_limit,
+                max_candles=timeframe_limits[timeframe],
             )
 
         candles_by_timeframe = {
@@ -440,6 +448,7 @@ def research_ml_evaluate_multitimeframe(
         data_summary = {
             timeframe: {
                 "count": markets[timeframe].get("count", len(candles_by_timeframe[timeframe])),
+                "requested_candle_limit": timeframe_limits[timeframe],
                 "last_candle_at": markets[timeframe].get("last_candle_at"),
                 "data_status": markets[timeframe].get("data_status"),
             }
