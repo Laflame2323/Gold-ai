@@ -553,15 +553,23 @@ async function runResearchEvaluation() {
   const state = $("researchState");
   button.disabled = true;
   button.innerHTML = "<span>✳</span> Evaluating... <b>…</b>";
-  state.textContent = "Loading a larger historical archive (up to 6,000 H1 candles) for a more reliable research test. This may take a few minutes.";
+  state.textContent = "Loading the research archive (3,000 H1 candles). This usually takes under a minute.";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
   try {
-    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=6000", { cache: "no-store" });
+    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=3000", {
+      cache: "no-store",
+      signal: controller.signal
+    });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Research evaluation failed (" + response.status + ").");
     renderResearchResult(data);
   } catch (error) {
-    state.textContent = error.message || "Could not complete the research evaluation. Check the research server and MT5 archive.";
+    state.textContent = error.name === "AbortError"
+      ? "The research server took too long to respond. Please wait briefly and try once more."
+      : (error.message || "Could not complete the research evaluation. Check the research server and MT5 archive.");
   } finally {
+    clearTimeout(timeoutId);
     button.disabled = false;
     button.innerHTML = "<span>✳</span> Run evaluation <b>→</b>";
   }
