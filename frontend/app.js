@@ -1,4 +1,4 @@
-const API_URL = "https://gold-ai-backend-p9el.onrender.com";
+const API_URL = "https://gold-ai-mtf-research.onrender.com";
 const $ = (id) => document.getElementById(id);
 
 let selectedTimeframe = "M15";
@@ -455,6 +455,109 @@ async function analyseGold() {
   }
 }
 
+
+
+const RESEARCH_HISTORY_KEY = "goldAiResearchHistoryV1";
+function readResearchHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RESEARCH_HISTORY_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.slice(0, 10) : [];
+  } catch (_) { return []; }
+}
+function saveResearchHistory(history) {
+  try { localStorage.setItem(RESEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 10))); }
+  catch (_) { $("researchState").textContent = "Evaluation completed, but this browser could not save local history."; }
+}
+function pct(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) + "%" : "—";
+}
+function renderResearchHistory() {
+  const host = $("researchHistory");
+  if (!host) return;
+  const history = readResearchHistory();
+  if (!history.length) {
+    host.innerHTML = "<p>No saved evaluations yet. Results will appear here after your first run.</p>";
+    return;
+  }
+  host.replaceChildren();
+  const table = document.createElement("table");
+  table.className = "research-history-table";
+  const header = document.createElement("tr");
+  ["DATE", "TEST ACCURACY", "BALANCED", "BASELINE", "SAMPLES"].forEach((label) => {
+    const th = document.createElement("th"); th.textContent = label; header.appendChild(th);
+  });
+  const thead = document.createElement("thead"); thead.appendChild(header);
+  const tbody = document.createElement("tbody");
+  history.forEach((item) => {
+    const row = document.createElement("tr");
+    [new Date(item.createdAt).toLocaleString(), pct(item.accuracy), pct(item.balanced), pct(item.baseline), String(item.samples ?? "—")].forEach((value) => {
+      const cell = document.createElement("td"); cell.textContent = value; row.appendChild(cell);
+    });
+    tbody.appendChild(row);
+  });
+  table.append(thead, tbody); host.appendChild(table);
+}
+function renderResearchResult(data) {
+  const test = data.untouched_test || {};
+  const train = data.train || {};
+  const validation = data.validation || {};
+  const baseline = data.test_majority_baseline_accuracy_pct;
+  $("researchTestAccuracy").textContent = pct(test.accuracy_pct);
+  $("researchTestSamples").textContent = (test.samples ?? data.split_samples?.test ?? "—") + " unseen test samples";
+  $("researchBalancedAccuracy").textContent = pct(test.balanced_accuracy_pct);
+  $("researchBaseline").textContent = pct(baseline);
+  const gap = Number(data.test_accuracy_minus_baseline_pct_points);
+  $("researchBaselineGap").textContent = Number.isFinite(gap) ? (gap > 0 ? "+" : "") + gap.toFixed(2) + " percentage points vs baseline" : "Comparison unavailable";
+  $("researchSamples").textContent = String(data.eligible_samples ?? "—");
+  const splits = data.split_samples || {};
+  $("researchSplits").textContent = "Train " + (splits.train ?? "—") + " · Validation " + (splits.validation ?? "—") + " · Test " + (splits.test ?? "—");
+  $("researchTimeframes").textContent = Array.isArray(data.fit_diagnostics?.selected_timeframes)
+    ? data.fit_diagnostics.selected_timeframes.join(" + ")
+    : Array.isArray(data.validation_ablation?.selected_timeframes)
+      ? data.validation_ablation.selected_timeframes.join(" + ")
+      : (data.timeframes || []).join(" + ") || "—";
+  $("researchModelStatus").textContent = data.candidate_model_trained ? "Candidate trained · not deployed" : "Not trained";
+  $("researchSource").textContent = data.data_source || "MT5 archive";
+  $("researchTestStatus").textContent = data.status === "complete" ? "Untouched chronological test" : (data.status || "Incomplete");
+  const warning = Number.isFinite(gap) && gap < 0
+    ? "The candidate scored below the majority baseline on unseen test data. It should not be promoted."
+    : "Review the untouched test, sample count and costs before drawing conclusions.";
+  $("researchState").textContent = data.status === "complete"
+    ? "Evaluation complete. " + warning
+    : (data.message || "Evaluation returned: " + (data.status || "unknown status"));
+  if (data.status === "complete") {
+    const history = readResearchHistory();
+    history.unshift({
+      createdAt: new Date().toISOString(),
+      accuracy: test.accuracy_pct,
+      balanced: test.balanced_accuracy_pct,
+      baseline,
+      samples: test.samples ?? splits.test ?? 0
+    });
+    saveResearchHistory(history);
+    renderResearchHistory();
+  }
+}
+async function runResearchEvaluation() {
+  const button = $("runResearchBtn");
+  const state = $("researchState");
+  button.disabled = true;
+  button.innerHTML = "<span>✳</span> Evaluating... <b>…</b>";
+  state.textContent = "Requesting the research server. This may take a few minutes while historical candles are read and evaluated.";
+  try {
+    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=3000", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Research evaluation failed (" + response.status + ").");
+    renderResearchResult(data);
+  } catch (error) {
+    state.textContent = error.message || "Could not complete the research evaluation. Check the research server and MT5 archive.";
+  } finally {
+    button.disabled = false;
+    button.innerHTML = "<span>✳</span> Run evaluation <b>→</b>";
+  }
+}
+
 function addChatMessage(role, message) {
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble " + (role === "user" ? "user-bubble" : "assistant-bubble");
@@ -505,6 +608,8 @@ document.querySelectorAll("[data-timeframe]").forEach((button) => {
 });
 
 $("analyzeBtn").addEventListener("click", analyseGold);
+$("runResearchBtn").addEventListener("click", runResearchEvaluation);
+renderResearchHistory();
 $("clearAlerts").addEventListener("click", () => { marketAlerts = []; renderMarketAlerts(); });
 $("refreshBtn").addEventListener("click", () => {
   loadGoldPrice();
