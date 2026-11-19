@@ -401,7 +401,7 @@ def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: 
 
 @app.get("/research/ml/evaluate-mtf")
 def research_ml_evaluate_multitimeframe(
-    horizon: int = 5, min_move_pct: float = 0.0, archive_limit: int = 12000,
+    horizon: int = 5, min_move_pct: float = 0.0, archive_limit: int = 3000,
 ):
     """Evaluate the experimental H4/H1/M30/M15 candidate on one broker archive."""
     from multitimeframe_research import evaluate_multitimeframe_research
@@ -424,21 +424,14 @@ def research_ml_evaluate_multitimeframe(
                 detail="No authenticated MT5 broker archive is available; reference-feed data is not substituted.",
             )
 
-        # Fetch the four verified broker histories concurrently. Each storage read
-        # retains its existing 10,000-candle cap and paginates in 1,000-row chunks.
+        # Read histories sequentially on the 512 MB free instance to avoid
+        # four simultaneous Supabase responses exhausting memory.
         markets = {}
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            jobs = {
-                executor.submit(
-                    get_mt5_market_candles,
-                    mt5_source["symbol"], mt5_source["source"], timeframe,
-                    max_candles=archive_limit,
-                ): timeframe
-                for timeframe in timeframes
-            }
-            for job in as_completed(jobs):
-                timeframe = jobs[job]
-                markets[timeframe] = job.result()
+        for timeframe in timeframes:
+            markets[timeframe] = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], timeframe,
+                max_candles=archive_limit,
+            )
 
         candles_by_timeframe = {
             timeframe: markets[timeframe].get("candles") or []
