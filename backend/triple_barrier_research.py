@@ -395,7 +395,7 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
     # Three consecutive, non-overlapping future blocks. The threshold is fixed
     # in advance; each model is refit only on labels fully resolved before its block.
     fold_edges = [validation_edge + int(span * fraction)
-                  for fraction in (0.05, 0.10, 0.15)] + [end + 1]
+                  for fraction in (0.05, 0.10)] + [end + 1]
     previous_edge = validation_edge
     for fold_number, next_edge in enumerate(fold_edges, start=1):
         test_rows = [k for k, d in enumerate(decisions)
@@ -425,6 +425,7 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
             "fold": fold_number, "status": "complete",
             "training_samples": len(fit_rows), "test_samples": len(test_rows),
             "accepted_samples": len(accepted),
+            "accepted_wins": wins,
             "coverage_pct": round(len(accepted) / len(test_rows) * 100, 2),
             "accepted_trade_win_rate_pct": round(wins / len(accepted) * 100, 2) if accepted else None,
             "all_setup_win_rate_pct": round(sum(actual) / len(actual) * 100, 2),
@@ -450,7 +451,7 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
         "initial_validation_samples": len(validation),
         "selected_parameters": {k: v for k, v in best.items() if k != "metrics"},
         "validation_selection_metrics": best["metrics"],
-        "folds": folds,
+        "folds": [{k: v for k, v in fold.items() if k != "accepted_wins"} for fold in folds],
         "aggregate": {
             "completed_folds": len(valid), "test_samples": total_test,
             "accepted_samples": total_accepted,
