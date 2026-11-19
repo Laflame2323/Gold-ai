@@ -844,6 +844,73 @@ def research_ml_evaluate_triple_barrier_mtf(
         raise HTTPException(status_code=503, detail=str(exc))
 
 
+@app.get("/research/ml/forward-test-triple-barrier-mtf")
+def research_ml_forward_test_triple_barrier_mtf(
+    base_timeframe: str = "M30", horizon: int = 24,
+    pt_atr: float = 1.5, sl_atr: float = 1.0,
+    confidence_threshold: float = 0.65,
+):
+    """Read-only expanding-window forward test at a fixed confidence threshold."""
+    from triple_barrier_research import evaluate_triple_barrier_forward_folds
+
+    selected_base = base_timeframe.upper()
+    if selected_base not in {"H1", "M30"}:
+        raise HTTPException(status_code=400, detail="base_timeframe must be H1 or M30.")
+    if horizon < 2 or horizon > 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 2 and 100.")
+    if not math.isfinite(pt_atr) or not 0.1 <= pt_atr <= 10:
+        raise HTTPException(status_code=400, detail="pt_atr must be between 0.1 and 10.")
+    if not math.isfinite(sl_atr) or not 0.1 <= sl_atr <= 10:
+        raise HTTPException(status_code=400, detail="sl_atr must be between 0.1 and 10.")
+    if not math.isfinite(confidence_threshold) or not 0.50 <= confidence_threshold <= 0.95:
+        raise HTTPException(status_code=400, detail="confidence_threshold must be between 0.50 and 0.95.")
+    try:
+        mt5_source = get_latest_mt5_source()
+        if not mt5_source:
+            raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
+        timeframes = ("H4", "H1", "M30", "M15")
+        timeframe_limits = {"H4": 1000, "H1": 3000, "M30": 6000, "M15": 12000}
+        candles_by_timeframe = {}
+        timeframe_data = {}
+        for timeframe in timeframes:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], timeframe,
+                max_candles=timeframe_limits[timeframe],
+            )
+            candles = market.get("candles") or []
+            if not candles:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{timeframe} archive contains no candles.",
+                )
+            candles_by_timeframe[timeframe] = candles
+            timeframe_data[timeframe] = {
+                "count": len(candles),
+                "requested_candle_limit": timeframe_limits[timeframe],
+                "last_candle_at": market.get("last_candle_at"),
+                "age_seconds": market.get("age_seconds"),
+                "data_status": market.get("data_status"),
+            }
+        result = evaluate_triple_barrier_forward_folds(
+            candles_by_timeframe, horizon=horizon, pt_atr=pt_atr,
+            sl_atr=sl_atr, base_timeframe=selected_base,
+            confidence_threshold=confidence_threshold,
+        )
+        return {
+            **result,
+            "symbol": mt5_source["symbol"],
+            "broker_source": mt5_source["source"],
+            "data_source": "Authenticated MT5 broker archive (read-only)",
+            "timeframe_data": timeframe_data,
+            "research_only": True, "read_only": True,
+            "execution_enabled": False, "accuracy_is_live": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 @app.get("/research/ml/evaluate-gradient-boosting-mtf")
 def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: float = 0.0):
     """Run an isolated HistGradientBoosting candidate on aligned broker candles."""
