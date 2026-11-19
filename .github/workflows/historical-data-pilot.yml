@@ -1,54 +1,132 @@
-name: Historical XAUUSD dataset acquisition pilot
+name: Historical XAUUSD long-range acquisition
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - research/multitimeframe-feature-builder
     paths:
       - .github/workflows/historical-data-pilot.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  acquire-audit:
+  acquire-normalize-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Download independent historical sample
+      - name: Install data tools
+        run: pip install pandas pyarrow
+      - name: Download annual HistData XAUUSD M1 files
         run: |
           set -euo pipefail
-          mkdir -p data/histdata_pilot
-          for year in 2009 2010 2025; do
+          mkdir -p data/histdata_raw
+          for year in {2009..2025}; do
             file="DAT_MT_XAUUSD_M1_${year}.csv"
             url="https://huggingface.co/datasets/fokan/xauusd-2009-2026/resolve/main/${file}?download=true"
-            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 600 "${url}" -o "data/histdata_pilot/${file}"
-            test -s "data/histdata_pilot/${file}"
+            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 "${url}" -o "data/histdata_raw/${file}"
+            test -s "data/histdata_raw/${file}"
           done
-      - name: Inspect raw formats and audit rows
+          file="DAT_MT_XAUUSD_M1_202601.csv"
+          url="https://huggingface.co/datasets/fokan/xauusd-2009-2026/resolve/main/${file}?download=true"
+          curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 300 "${url}" -o "data/histdata_raw/${file}"
+          test -s "data/histdata_raw/${file}"
+      - name: Normalize fixed-EST timestamps to UTC and audit data
         run: |
           python - <<'PY'
-          import csv, hashlib, json
+          import hashlib, json
           from pathlib import Path
-          report = {"source": "Hugging Face fokan/xauusd-2009-2026; files identify HistData XAUUSD M1", "research_only": True, "exness_data_used": False, "files": []}
-          for path in sorted(Path("data/histdata_pilot").glob("*.csv")):
-              counts, samples = {}, []
+          import pandas as pd
+
+          raw_dir = Path("data/histdata_raw")
+          out_dir = Path("data/histdata_normalized")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          all_frames = []
+          manifest = {
+              "source": "HistData XAUUSD M1 files mirrored at Hugging Face dataset fokan/xauusd-2009-2026",
+              "source_timezone": "EST fixed UTC-5, no daylight-saving adjustment (HistData FAQ)",
+              "normalized_timezone": "UTC",
+              "price_basis": "bid OHLC",
+              "volume": "source volume field is zero/unavailable; excluded",
+              "exness_data_used": False,
+              "research_only": True,
+              "production_model_persisted": False,
+              "execution_enabled": False,
+              "files": []
+          }
+
+          for path in sorted(raw_dir.glob("*.csv")):
               digest = hashlib.sha256(path.read_bytes()).hexdigest()
-              with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as f:
-                  for i, row in enumerate(csv.reader(f)):
-                      counts[len(row)] = counts.get(len(row), 0) + 1
-                      if len(samples) < 5: samples.append(row)
-              report["files"].append({"file": path.name, "bytes": path.stat().st_size, "sha256": digest, "row_width_counts": counts, "first_rows": samples})
-          Path("data/histdata_pilot/audit.json").write_text(json.dumps(report, indent=2))
-          print(json.dumps(report, indent=2))
+              raw = pd.read_csv(path, header=None, dtype=str)
+              if raw.shape[1] != 7:
+                  raise ValueError(f"{path.name}: expected 7 columns (date,time,OHLC,volume), got {raw.shape[1]}")
+              raw.columns = ["date", "time", "open", "high", "low", "close", "source_volume"]
+              ts_naive = pd.to_datetime(raw["date"] + " " + raw["time"], format="%Y.%m.%d %H:%M", errors="coerce")
+              if ts_naive.isna().any():
+                  raise ValueError(f"{path.name}: invalid timestamps: {int(ts_naive.isna().sum())}")
+              ts_utc = ts_naive.dt.tz_localize("Etc/GMT+5").dt.tz_convert("UTC")
+              frame = pd.DataFrame({
+                  "timestamp": ts_utc,
+                  "open": pd.to_numeric(raw["open"], errors="coerce"),
+                  "high": pd.to_numeric(raw["high"], errors="coerce"),
+                  "low": pd.to_numeric(raw["low"], errors="coerce"),
+                  "close": pd.to_numeric(raw["close"], errors="coerce"),
+              })
+              if frame[["open","high","low","close"]].isna().any().any():
+                  raise ValueError(f"{path.name}: nonnumeric OHLC")
+              if (frame[["open","high","low","close"]] <= 0).any().any():
+                  raise ValueError(f"{path.name}: nonpositive OHLC")
+              valid = (
+                  (frame["low"] <= frame["open"]) &
+                  (frame["low"] <= frame["close"]) &
+                  (frame["high"] >= frame["open"]) &
+                  (frame["high"] >= frame["close"]) &
+                  (frame["low"] <= frame["high"])
+              )
+              if not valid.all():
+                  raise ValueError(f"{path.name}: {int((~valid).sum())} invalid OHLC rows")
+              duplicates = int(frame["timestamp"].duplicated().sum())
+              if duplicates:
+                  raise ValueError(f"{path.name}: {duplicates} duplicate timestamps")
+              if not frame["timestamp"].is_monotonic_increasing:
+                  raise ValueError(f"{path.name}: timestamps are not sorted")
+              diffs = frame["timestamp"].diff().dropna().dt.total_seconds().div(60)
+              row = {
+                  "file": path.name,
+                  "rows": int(len(frame)),
+                  "first_utc": frame["timestamp"].iloc[0].isoformat(),
+                  "last_utc": frame["timestamp"].iloc[-1].isoformat(),
+                  "sha256": digest,
+                  "duplicate_timestamps": duplicates,
+                  "invalid_ohlc_rows": int((~valid).sum()),
+                  "gaps_over_1m": int((diffs > 1).sum()),
+                  "max_gap_minutes": float(diffs.max()) if len(diffs) else 0,
+                  "median_interval_minutes": float(diffs.median()) if len(diffs) else 0,
+                  "source_volume_nonzero_rows": int((pd.to_numeric(raw["source_volume"], errors="coerce").fillna(0) != 0).sum())
+              }
+              manifest["files"].append(row)
+              all_frames.append(frame)
+              print(json.dumps(row))
+          combined = pd.concat(all_frames, ignore_index=True).sort_values("timestamp")
+          if combined["timestamp"].duplicated().any():
+              raise ValueError("duplicate timestamps across annual files")
+          combined.to_parquet(out_dir / "xauusd_histdata_m1_utc.parquet", index=False, compression="zstd")
+          manifest["total_rows"] = int(len(combined))
+          manifest["first_utc"] = combined["timestamp"].iloc[0].isoformat()
+          manifest["last_utc"] = combined["timestamp"].iloc[-1].isoformat()
+          manifest["combined_duplicate_timestamps"] = int(combined["timestamp"].duplicated().sum())
+          (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+          print(json.dumps({k:v for k,v in manifest.items() if k != "files"}, indent=2))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: xauusd-histdata-acquisition-pilot
-          path: data/histdata_pilot/
-          retention-days: 14
+          name: gold-ai-histdata-xauusd-m1-utc-2009-2026jan
+          path: |
+            data/histdata_normalized/
+            data/histdata_raw/*.csv
+          retention-days: 30
