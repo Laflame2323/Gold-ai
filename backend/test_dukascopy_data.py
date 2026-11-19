@@ -14,6 +14,15 @@ class DukascopyDataTests(unittest.TestCase):
         self.assertEqual(result[stamp]["open"], 2000.0)
         self.assertEqual(result[stamp]["high"], 2002.0)
 
+    def test_drops_flat_zero_volume_closed_market_filler(self):
+        payload = self.payload([
+            (0, 2000000, 2000000, 2000000, 2000000, 0.0),
+            (60, 2000000, 2001000, 1999000, 2002000, 2.0),
+        ])
+        result = decode_candle_file(payload, date(2026, 1, 1))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(next(iter(result.values()))["volume"], 2.0)
+
     def test_reject_partial_record(self):
         with self.assertRaises(ValueError):
             decode_candle_file(lzma.compress(b"bad", format=lzma.FORMAT_ALONE), date(2026, 1, 1))
