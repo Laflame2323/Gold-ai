@@ -1,0 +1,65 @@
+name: Research XAUUSD alternate-source pilot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/multitimeframe-feature-builder
+    paths:
+      - .github/workflows/getdata-sample-pilot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  download-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download public XAUUSD M1 evaluation sample
+        run: |
+          set -euo pipefail
+          mkdir -p data/getdata
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://raw.githubusercontent.com/getdata-finance/xauusd-1m-ohlcv-metals-historical-data/main/XAUUSD_1m.csv \
+            --output data/getdata/XAUUSD_1m.csv
+      - name: Validate timestamps and OHLC
+        run: |
+          python - <<'PY'
+          import csv, hashlib, json
+          from datetime import datetime
+          from pathlib import Path
+          p = Path("data/getdata/XAUUSD_1m.csv")
+          rows = 0
+          first = last = None
+          previous = None
+          bad = 0
+          with p.open(newline="", encoding="utf-8") as f:
+              reader = csv.DictReader(f)
+              required = {"datetime", "open", "high", "low", "close", "volume"}
+              if not required.issubset(reader.fieldnames or []):
+                  raise SystemExit(f"Unexpected columns: {reader.fieldnames}")
+              for r in reader:
+                  ts = datetime.fromisoformat(r["datetime"].replace("Z", "+00:00"))
+                  o,h,l,c,v = (float(r[k]) for k in ("open","high","low","close","volume"))
+                  if ts.tzinfo is None or not (l <= min(o,c) <= max(o,c) <= h) or v < 0:
+                      bad += 1
+                      continue
+                  if previous is not None and ts <= previous:
+                      bad += 1
+                  previous = ts
+                  first = first or ts.isoformat()
+                  last = ts.isoformat()
+                  rows += 1
+          if rows < 1000 or bad:
+              raise SystemExit(f"Quality gate failed: rows={rows}, invalid_or_unsorted={bad}")
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          report = {"source":"getdata-finance public GitHub sample","symbol":"XAUUSD","timeframe":"M1","rows":rows,"first_utc":first,"last_utc":last,"invalid_or_unsorted_rows":bad,"sha256":digest,"limitations":["single OHLCV feed; no bid/ask","sample is historical and may lag current market","not Exness broker data"]}
+          Path("data/getdata/audit.json").write_text(json.dumps(report, indent=2))
+          print(json.dumps(report, indent=2))
+          PY
+      - name: Preserve pilot dataset
+        uses: actions/upload-artifact@v4
+        with:
+          name: getdata-xauusd-m1-pilot
+          path: data/getdata/
+          retention-days: 14
