@@ -191,6 +191,8 @@ def archive_mt5_tick_batch(batch: MT5TickBatch) -> dict:
             "" if tick.ask is None else format(tick.ask, ".12g"),
             "" if tick.last is None else format(tick.last, ".12g"),
             str(tick.flags),
+            "" if tick.volume is None else format(tick.volume, ".12g"),
+            "" if tick.volume_real is None else format(tick.volume_real, ".12g"),
         ])
         tick_key = hashlib.sha256(key_payload.encode("utf-8")).hexdigest()
         rows.append({
