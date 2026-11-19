@@ -575,8 +575,8 @@ function renderResearchResult(data) {
   $("testBalanced").textContent = pct(test.balanced_accuracy_pct);
   $("testDelta").textContent = signedPct(data.test_accuracy_minus_baseline_pct_points);
   const coverage = Array.isArray(data.confidence_coverage) ? data.confidence_coverage : [];
-  const selected = coverage.find((x) => Math.abs(Number(x.threshold) - 0.55) < 0.001) || coverage[0];
-  $("confidenceFilter").textContent = selected ? Number(selected.threshold).toFixed(2) + " threshold" : "Not available";
+  const selected = coverage.find((x) => Math.abs(Number(x.probability_threshold) - 0.55) < 0.001) || coverage[0];
+  $("confidenceFilter").textContent = selected ? Number(selected.probability_threshold).toFixed(2) + " threshold" : "Not available";
   $("confidenceCoverage").textContent = selected ? pct(selected.coverage_pct) + " · " + pct(selected.accuracy_pct) + " accuracy" : "Not available";
   $("researchStatus").textContent = data.status === "complete" ? "RESEARCH COMPLETE" : String(data.status || "UNKNOWN").toUpperCase();
   $("researchNote").textContent = data.status === "complete"
