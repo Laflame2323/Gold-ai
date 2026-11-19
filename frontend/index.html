@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#090e18">
-  <meta name="description" content="Gold AI — intelligent XAU/USD market monitoring and analysis.">
-  <title>Gold AI — Trading Terminal</title>
+  <meta name="description" content="Gold AI — multi-timeframe gold market intelligence and model research.">
+  <title>Gold AI — Intelligence Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -25,6 +25,8 @@
         <a class="nav-link" href="#market-chart"><span class="nav-icon">⌁</span> Live market</a>
         <a class="nav-link" href="#live-monitor"><span class="nav-icon">◉</span> Live monitor</a>
         <a class="nav-link" href="#ai-signal"><span class="nav-icon">✳</span> AI analysis</a>
+        <a class="nav-link" href="#research-lab"><span class="nav-icon">⌘</span> AI research lab</a>
+        <a class="nav-link" href="#mt5-connection"><span class="nav-icon">◉</span> MT5 data</a>
         <a class="nav-link" href="#assistant"><span class="nav-icon">◌</span> AI assistant</a>
       </nav>
 
@@ -95,6 +97,17 @@
         <div class="monitor-foot"><span id="monitorMessage">Connecting to the XAUS reference feed…</span><span class="monitor-readonly">READ ONLY · NO TRADES</span></div>
       </section>
 
+      <section class="panel broker-panel" id="mt5-connection">
+        <div class="panel-heading"><div><p class="eyebrow">BROKER DATA BRIDGE</p><h2>MT5 connection status</h2></div><span class="small-tag" id="mt5Badge">CHECKING</span></div>
+        <div class="broker-grid">
+          <div><span>EXNESS FEED</span><strong id="mt5FeedState">Checking connection…</strong><small id="mt5Symbol">Broker symbol: —</small></div>
+          <div><span>LAST CANDLE RECEIVED</span><strong id="mt5LastReceived">—</strong><small id="mt5Freshness">Checking latest upload time</small></div>
+          <div><span>INGESTION</span><strong id="mt5Ingestion">—</strong><small>Authenticated, read-only bridge</small></div>
+          <div><span>EXECUTION</span><strong class="safe-value">DISABLED</strong><small>No orders can be placed by this app</small></div>
+        </div>
+        <p class="broker-note" id="mt5Note">Broker feed status is checked independently from the reference spot-price feed.</p>
+      </section>
+
       <section class="panel regime-panel" id="market-regime">
         <div class="panel-heading"><div><p class="eyebrow">MARKET STRUCTURE INTELLIGENCE</p><h2>Market regime detector</h2></div><span class="small-tag" id="regimeState">AWAITING ANALYSIS</span></div>
         <div class="regime-main"><strong id="regimeLabel">UNCONFIRMED</strong><span id="regimeDirection">NEUTRAL</span></div>
@@ -163,23 +176,43 @@
 
         <section class="panel signal-panel" id="ai-signal">
           <div class="panel-heading">
-            <div><p class="eyebrow">GOLD AI ENGINE</p><h2>AI market signal</h2></div>
+            <div><p class="eyebrow">GOLD AI ENGINE</p><h2>Research signal &amp; confidence</h2></div>
             <span class="ai-mark">✳</span>
           </div>
           <div class="signal-card">
             <div class="signal-top"><span class="metric-label">CURRENT SIGNAL</span><span class="signal-state" id="signalState">VALIDATING</span></div>
             <div class="signal-value wait" id="signal">WAIT</div>
-            <p id="message" class="signal-message">The analysis engine is validating market candle data before issuing trading signals.</p>
+            <p id="message" class="signal-message">This panel reports research bias only. It is not a live prediction or a broker instruction.</p>
           </div>
           <div class="signal-details">
             <div><span>Entry price</span><strong id="entryValue">—</strong></div>
             <div><span>Stop loss</span><strong id="stopValue">—</strong></div>
             <div><span>Take profit</span><strong id="targetValue">—</strong></div>
           </div>
-          <div class="model-note"><span class="note-icon">i</span><span id="modelStatus">AI model training is not enabled yet. Trade levels will appear when validated analysis is available.</span></div>
+          <div class="model-note"><span class="note-icon">i</span><span id="modelStatus">Research model is not persisted. Run an evaluation in the AI Research Lab to inspect historical test confidence.</span></div>
           <button class="primary-button" id="analyzeBtn" type="button"><span>✳</span> Analyse gold market <b>→</b></button>
         </section>
       </div>
+
+      <section class="panel research-panel" id="research-lab">
+        <div class="panel-heading"><div><p class="eyebrow">MODEL VALIDATION WORKSPACE</p><h2>AI accuracy &amp; training</h2></div><span class="small-tag" id="researchStatus">NOT RUNNING</span></div>
+        <div class="research-intro"><div><strong>Multi-timeframe research candidate</strong><p>Fits a temporary model using historical MT5 candles, then scores a later untouched test period. This does not update or replace the production model.</p></div><button class="research-button" id="runResearchBtn" type="button">Run evaluation <span>→</span></button></div>
+        <div class="research-metrics">
+          <div><span>TRAIN ACCURACY</span><strong id="trainAccuracy">—</strong><small>Seen training block</small></div>
+          <div><span>VALIDATION</span><strong id="validationAccuracy">—</strong><small>Model selection block</small></div>
+          <div class="test-metric"><span>UNSEEN TEST</span><strong id="testAccuracy">—</strong><small id="testSamples">Untouched test block</small></div>
+          <div><span>MAJORITY BASELINE</span><strong id="testBaseline">—</strong><small>Simple benchmark</small></div>
+        </div>
+        <div class="research-detail-grid">
+          <div class="research-detail"><span>TEST BALANCED ACCURACY</span><strong id="testBalanced">—</strong></div>
+          <div class="research-detail"><span>TEST VS BASELINE</span><strong id="testDelta">—</strong></div>
+          <div class="research-detail"><span>CONFIDENCE FILTER</span><strong id="confidenceFilter">—</strong></div>
+          <div class="research-detail"><span>FILTERED COVERAGE</span><strong id="confidenceCoverage">—</strong></div>
+        </div>
+        <div class="research-footnote" id="researchNote">No evaluation has been run in this browser yet. Accuracy is historical research, not live prediction accuracy.</div>
+        <div class="history-heading"><strong>RECENT TRAINING REPORTS</strong><span>Saved on this device</span></div>
+        <div class="training-history" id="trainingHistory"><div class="history-empty">Your completed research runs will appear here.</div></div>
+      </section>
 
       <section class="lower-grid">
         <section class="panel data-panel">
