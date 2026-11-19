@@ -37,9 +37,9 @@
     const report = $("researchReport");
     if (report) {
       const labels = report.querySelectorAll(":scope > div > span");
-      if (labels[4]) labels[4].textContent = "VALIDATION META ACCURACY";
-      if (labels[5]) labels[5].textContent = "TEST META SAMPLES";
-      if (labels[6]) labels[6].textContent = "ACCEPTED TEST SIGNALS";
+      if (labels[4]) labels[4].textContent = "TRAINING META ACCURACY";
+      if (labels[5]) labels[5].textContent = "VALIDATION META ACCURACY";
+      if (labels[6]) labels[6].textContent = "TEST META SAMPLES";
     }
     const historyHeading = document.querySelector("#training-lab .history-heading strong");
     if (historyHeading) historyHeading.textContent = "Recent SMC research runs";
@@ -75,8 +75,8 @@
     const splits = data.split_samples || {};
     $("researchSplits").textContent = "Train " + (splits.train ?? "—") +
       " · Validation " + (splits.validation ?? "—") + " · Test " + (splits.test ?? "—");
-    $("researchTimeframes").textContent = (data.base_timeframe || "M30") + " + " +
-      (data.timeframes || ["H4", "H1", "M30", "M15"]).join(" + ");
+    const timeframes = data.timeframes || ["H4", "H1", "M30", "M15"];
+    $("researchTimeframes").textContent = Array.from(new Set([data.base_timeframe || "M30", ...timeframes])).join(" + ");
     $("researchModelStatus").textContent = data.candidate_model_trained
       ? "SMC meta-candidate · not deployed" : "Not trained";
     $("researchSource").textContent = data.data_source || "Authenticated MT5 archive";
