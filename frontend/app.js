@@ -1,4 +1,4 @@
-const API_URL = "https://gold-ai-backend-p9el.onrender.com";
+const API_URL = "https://gold-ai-mtf-research.onrender.com";
 const $ = (id) => document.getElementById(id);
 
 let selectedTimeframe = "M15";
@@ -86,18 +86,18 @@ function initialiseChart() {
     width: chartElement.clientWidth,
     height: chartElement.clientHeight,
     layout: {
-      background: { color: "#111a29" },
+      background: { color: "#0d1428" },
       textColor: "#8796aa",
       fontFamily: "DM Mono, monospace",
       fontSize: 10
     },
     grid: {
-      vertLines: { color: "#1d2a3c" },
+      vertLines: { color: "#202b49" },
       horzLines: { color: "#1d2a3c" }
     },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     rightPriceScale: {
-      borderColor: "#2b394d",
+      borderColor: "#344365",
       scaleMargins: { top: 0.12, bottom: 0.12 }
     },
     timeScale: {
@@ -114,13 +114,13 @@ function initialiseChart() {
   });
 
   candleSeries = chart.addCandlestickSeries({
-    upColor: "#25c58a",
-    downColor: "#ef6670",
-    borderUpColor: "#25c58a",
-    borderDownColor: "#ef6670",
-    wickUpColor: "#25c58a",
-    wickDownColor: "#ef6670",
-    priceLineColor: "#e8b64d",
+    upColor: "#36d6a0",
+    downColor: "#ff718d",
+    borderUpColor: "#36d6a0",
+    borderDownColor: "#ff718d",
+    wickUpColor: "#36d6a0",
+    wickDownColor: "#ff718d",
+    priceLineColor: "#9b8cff",
     priceLineWidth: 1
   });
 
@@ -301,7 +301,7 @@ async function refreshAllTimeframeMonitor() {
       state.className = "tf-state " + (item.recent ? "ok" : "bad");
       const age = Number.isFinite(Number(item.age)) ? Math.floor(Number(item.age)) + "s old" : "age n/a";
       const bar = item.last ? new Date(item.last).toLocaleTimeString() : "bar time n/a";
-      detail.textContent = bar + " · " + age;
+      detail.textContent = bar + " · " + age + " · " + (item.count ?? "—") + " bars";
     }
   });
   const healthy = results.filter((item) => !item.error && item.recent).length;
@@ -527,3 +527,114 @@ document.addEventListener("visibilitychange", () => {
     refreshAllTimeframeMonitor();
   }
 });
+
+
+/* Research workspace: temporary MTF fit, untouched test metrics and local report history. */
+function pct(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(2) + "%" : "—";
+}
+function signedPct(value) {
+  if (!Number.isFinite(Number(value))) return "—";
+  const n = Number(value);
+  return (n > 0 ? "+" : "") + n.toFixed(2) + " pp";
+}
+function loadTrainingHistory() {
+  const host = $("trainingHistory");
+  let items = [];
+  try { items = JSON.parse(localStorage.getItem("goldAiResearchHistory") || "[]"); } catch (_) {}
+  if (!Array.isArray(items) || !items.length) {
+    host.innerHTML = '<div class="history-empty">Your completed research runs will appear here.</div>';
+    return;
+  }
+  host.replaceChildren();
+  items.slice(0, 6).forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "history-row";
+    const label = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = item.model || "MTF research candidate";
+    const date = document.createElement("small");
+    date.textContent = item.date || "Date unavailable";
+    label.append(name, date);
+    const score = document.createElement("strong");
+    score.className = "history-score";
+    score.textContent = item.test == null ? "No test score" : pct(item.test);
+    row.append(label, score);
+    host.appendChild(row);
+  });
+}
+function renderResearchResult(data) {
+  const test = data.untouched_test || {};
+  const train = data.train || {};
+  const validation = data.validation || {};
+  $("trainAccuracy").textContent = pct(train.accuracy_pct);
+  $("validationAccuracy").textContent = pct(validation.accuracy_pct);
+  $("testAccuracy").textContent = pct(test.accuracy_pct);
+  $("testSamples").textContent = (data.split_samples?.test ?? "—") + " unseen samples";
+  $("testBaseline").textContent = pct(data.test_majority_baseline_accuracy_pct);
+  $("testBalanced").textContent = pct(test.balanced_accuracy_pct);
+  $("testDelta").textContent = signedPct(data.test_accuracy_minus_baseline_pct_points);
+  const coverage = Array.isArray(data.confidence_coverage) ? data.confidence_coverage : [];
+  const selected = coverage.find((x) => Math.abs(Number(x.threshold) - 0.55) < 0.001) || coverage[0];
+  $("confidenceFilter").textContent = selected ? Number(selected.threshold).toFixed(2) + " threshold" : "Not available";
+  $("confidenceCoverage").textContent = selected ? pct(selected.coverage_pct) + " · " + pct(selected.accuracy_pct) + " accuracy" : "Not available";
+  $("researchStatus").textContent = data.status === "complete" ? "RESEARCH COMPLETE" : String(data.status || "UNKNOWN").toUpperCase();
+  $("researchNote").textContent = data.status === "complete"
+    ? "Temporary candidate only · " + (data.eligible_samples ?? "—") + " eligible samples · " + (data.data_source || "MT5 archive") + ". No model was saved or promoted. Test results are historical and exclude trading costs."
+    : (data.message || "The research run did not complete. Check candle history and try again.");
+  const items = (() => { try { return JSON.parse(localStorage.getItem("goldAiResearchHistory") || "[]"); } catch (_) { return []; } })();
+  items.unshift({
+    model: data.model_type || "MTF candidate",
+    test: test.accuracy_pct,
+    date: new Date().toLocaleString(),
+    status: data.status
+  });
+  try { localStorage.setItem("goldAiResearchHistory", JSON.stringify(items.slice(0, 10))); } catch (_) {}
+  loadTrainingHistory();
+}
+async function runResearchEvaluation() {
+  const button = $("runResearchBtn");
+  button.disabled = true;
+  button.textContent = "Training candidate…";
+  $("researchStatus").textContent = "RUNNING";
+  $("researchNote").textContent = "Reading the research MT5 archive and fitting a temporary candidate. This can take a little while.";
+  try {
+    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=6000", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Research evaluation failed (HTTP " + response.status + ").");
+    renderResearchResult(data);
+  } catch (error) {
+    $("researchStatus").textContent = "NOT COMPLETED";
+    $("researchNote").textContent = error.message || "Could not complete the research evaluation.";
+  } finally {
+    button.disabled = false;
+    button.innerHTML = 'Run evaluation <span>→</span>';
+  }
+}
+async function loadMt5Status() {
+  try {
+    const response = await fetch(API_URL + "/broker/mt5/status", { cache: "no-store" });
+    if (!response.ok) throw new Error("Status endpoint returned " + response.status);
+    const data = await response.json();
+    const received = data.last_received_at ? new Date(data.last_received_at) : null;
+    const ageMinutes = received ? Math.max(0, Math.floor((Date.now() - received.getTime()) / 60000)) : null;
+    const recent = ageMinutes !== null && ageMinutes <= 10;
+    $("mt5Badge").textContent = data.broker_feed_available ? (recent ? "FEED RECENT" : "FEED STALE") : "NO BROKER FEED";
+    $("mt5FeedState").textContent = data.broker_feed_available ? (recent ? "Exness feed detected" : "Feed detected · stale") : "No MT5 archive detected";
+    $("mt5Symbol").textContent = "Broker symbol: " + (data.symbol || "—");
+    $("mt5LastReceived").textContent = received ? received.toLocaleString() : "No upload received";
+    $("mt5Freshness").textContent = ageMinutes === null ? "Waiting for the first MT5 upload" : ageMinutes + " minutes since last upload";
+    $("mt5Ingestion").textContent = data.ingestion_configured ? "CONFIGURED" : "NOT CONFIGURED";
+    $("mt5Note").textContent = data.broker_feed_available
+      ? (recent ? "MT5 broker candles have been received recently. Keep the MT5 terminal and EA online for continuous updates." : "An MT5 archive exists, but its latest upload is not recent. Open MT5 and check the EA connection.")
+      : "No authenticated MT5 broker archive is currently visible to the research service. Reference spot data is separate.";
+  } catch (error) {
+    $("mt5Badge").textContent = "STATUS UNAVAILABLE";
+    $("mt5FeedState").textContent = "Could not check MT5";
+    $("mt5Note").textContent = error.message || "MT5 status could not be retrieved.";
+  }
+}
+$("runResearchBtn").addEventListener("click", runResearchEvaluation);
+loadTrainingHistory();
+loadMt5Status();
+setInterval(loadMt5Status, 30000);
