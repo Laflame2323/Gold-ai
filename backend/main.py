@@ -860,14 +860,30 @@ def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: f
         mt5_source = get_latest_mt5_source()
         if not mt5_source:
             raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
+        # Match the proven low-memory research window used by the logistic
+        # evaluator. Scale counts to cover roughly the same calendar period.
+        archive_limit = 3000
+        timeframe_limits = {
+            "H4": 1000,
+            "H1": archive_limit,
+            "M30": archive_limit * 2,
+            "M15": archive_limit * 4,
+        }
         candles_by_timeframe = {}
+        timeframe_data = {}
         for timeframe in ("H4", "H1", "M30", "M15"):
             market = get_mt5_market_candles(
-                mt5_source["symbol"], mt5_source["source"], timeframe
+                mt5_source["symbol"], mt5_source["source"], timeframe,
+                max_candles=timeframe_limits[timeframe],
             )
             if market.get("data_status") != "recent":
                 raise HTTPException(status_code=503, detail=f"{timeframe} archive is stale.")
             candles_by_timeframe[timeframe] = market.get("candles") or []
+            timeframe_data[timeframe] = {
+                "count": len(candles_by_timeframe[timeframe]),
+                "last_candle_at": market.get("last_candle_at"),
+                "data_status": market.get("data_status"),
+            }
         result = evaluate_gradient_boosting(
             candles_by_timeframe, horizon=horizon, min_move_pct=min_move_pct
         )
@@ -876,10 +892,7 @@ def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: f
             "symbol": mt5_source["symbol"],
             "broker_source": mt5_source["source"],
             "data_source": "Authenticated MT5 broker archive (read-only)",
-            "timeframe_data": {
-                tf: {"count": len(candles_by_timeframe[tf])}
-                for tf in candles_by_timeframe
-            },
+            "timeframe_data": timeframe_data,
             "research_only": True, "read_only": True,
             "execution_enabled": False, "accuracy_is_live": False,
         }
