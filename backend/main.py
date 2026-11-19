@@ -789,20 +789,16 @@ def research_ml_evaluate_triple_barrier_mtf(
         if not mt5_source:
             raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
         timeframes = ("H4", "H1", "M30", "M15")
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {
-                timeframe: executor.submit(
-                    get_mt5_market_candles,
-                    mt5_source["symbol"], mt5_source["source"], timeframe,
-                )
-                for timeframe in timeframes
-            }
-            markets = {timeframe: future.result()
-                       for timeframe, future in futures.items()}
+        # Read bounded histories sequentially to stay within the research
+        # service's 512 MiB memory limit. M30 is the event/label timeframe.
+        timeframe_limits = {"H4": 1000, "H1": 3000, "M30": 6000, "M15": 12000}
         candles_by_timeframe = {}
         timeframe_data = {}
         for timeframe in timeframes:
-            market = markets[timeframe]
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], timeframe,
+                max_candles=timeframe_limits[timeframe],
+            )
             candles = market.get("candles") or []
             if not candles:
                 raise HTTPException(
@@ -811,7 +807,8 @@ def research_ml_evaluate_triple_barrier_mtf(
                 )
             candles_by_timeframe[timeframe] = candles
             timeframe_data[timeframe] = {
-                "count": market.get("count", len(candles)),
+                "count": len(candles),
+                "requested_candle_limit": timeframe_limits[timeframe],
                 "last_candle_at": market.get("last_candle_at"),
                 "age_seconds": market.get("age_seconds"),
                 "data_status": market.get("data_status"),
