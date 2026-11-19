@@ -167,12 +167,8 @@ def research_backtest(timeframe: str = "H1", horizon: int = 5):
     try:
         mt5_source = get_latest_mt5_source()
         if mt5_source:
-            # The dashboard only needs a compact chart window. Do not read
-            # the entire retained broker archive on every chart/health poll;
-            # the research evaluator requests its own larger history window.
             market = get_mt5_market_candles(
-                mt5_source["symbol"], mt5_source["source"], selected_timeframe,
-                max_candles=1000,
+                mt5_source["symbol"], mt5_source["source"], selected_timeframe
             )
             source_label = "Authenticated MT5 broker archive (read-only)"
             symbol = mt5_source["symbol"]
@@ -648,8 +644,12 @@ def market_candles(timeframe: str = "M15"):
     try:
         mt5_source = get_latest_mt5_source()
         if mt5_source:
+            # The dashboard needs only a compact chart window. Avoid reading
+            # the entire retained broker archive on every chart/health poll;
+            # research evaluation requests its own larger history window.
             market = get_mt5_market_candles(
-                mt5_source["symbol"], mt5_source["source"], selected_timeframe
+                mt5_source["symbol"], mt5_source["source"], selected_timeframe,
+                max_candles=1000,
             )
             if not market["candles"]:
                 raise HTTPException(
