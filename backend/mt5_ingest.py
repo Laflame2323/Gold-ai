@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from market_storage import _archive_reference_rows
@@ -132,3 +133,80 @@ def archive_mt5_batch(batch: MT5Batch) -> dict:
         "rows_sent": rows_saved,
         "chunks_saved": chunks_saved,
     }
+
+
+class MT5Tick(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    time_msc: int = Field(gt=0)
+    bid: float | None = Field(default=None, gt=0)
+    ask: float | None = Field(default=None, gt=0)
+    last: float | None = Field(default=None, gt=0)
+    volume: float | None = Field(default=None, ge=0)
+    volume_real: float | None = Field(default=None, ge=0)
+    flags: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_tick(self):
+        if self.bid is None and self.ask is None and self.last is None:
+            raise ValueError("A tick must contain at least one price.")
+        if self.bid is not None and self.ask is not None and self.ask < self.bid:
+            raise ValueError("Tick ask cannot be below bid.")
+        return self
+
+
+class MT5TickBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    broker_server: str = Field(min_length=1, max_length=100)
+    symbol: str = Field(min_length=1, max_length=32)
+    server_utc_offset_seconds: int = Field(ge=-50400, le=50400)
+    ticks: list[MT5Tick] = Field(min_length=1, max_length=500)
+
+    @field_validator("broker_server", "symbol")
+    @classmethod
+    def validate_tick_labels(cls, value):
+        value = value.strip()
+        if not value or not re.fullmatch(r"[A-Za-z0-9._# -]+", value):
+            raise ValueError("Invalid broker or symbol label.")
+        return value
+
+
+def archive_mt5_tick_batch(batch: MT5TickBatch) -> dict:
+    """Store broker ticks in the isolated research-only tick archive."""
+    now = datetime.now(timezone.utc)
+    now_msc = int(now.timestamp() * 1000)
+    received_at = now.isoformat()
+    source = f"MT5:{batch.broker_server}"
+    rows = []
+    for tick in batch.ticks:
+        utc_msc = tick.time_msc - batch.server_utc_offset_seconds * 1000
+        if utc_msc > now_msc + 5000:
+            raise ValueError("Future-dated MT5 ticks are not accepted.")
+        if utc_msc <= 0:
+            raise ValueError("Invalid MT5 tick timestamp.")
+        key_payload = "|".join([
+            str(utc_msc),
+            "" if tick.bid is None else format(tick.bid, ".12g"),
+            "" if tick.ask is None else format(tick.ask, ".12g"),
+            "" if tick.last is None else format(tick.last, ".12g"),
+            str(tick.flags),
+        ])
+        tick_key = hashlib.sha256(key_payload.encode("utf-8")).hexdigest()
+        rows.append({
+            "symbol": batch.symbol,
+            "source": source,
+            "tick_time_msc": utc_msc,
+            "bid": tick.bid,
+            "ask": tick.ask,
+            "last": tick.last,
+            "volume": tick.volume,
+            "volume_real": tick.volume_real,
+            "flags": tick.flags,
+            "tick_key": tick_key,
+            "received_at": received_at,
+        })
+    result = _archive_reference_rows(
+        "mt5_ticks_research", rows, "symbol,source,tick_key"
+    )
+    return result
