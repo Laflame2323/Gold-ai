@@ -7,6 +7,11 @@ on:
       - research/multitimeframe-feature-builder
     paths:
       - .github/workflows/getdata-sample-pilot.yml
+      - backend/getdata_research_evaluation.py
+      - backend/triple_barrier_research.py
+      - backend/causal_smc_features.py
+      - backend/multitimeframe_features.py
+      - backend/research_ml.py
 
 permissions:
   contents: read
@@ -15,6 +20,14 @@ jobs:
   download-and-audit:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend requirements
+        run: python -m pip install -r backend/requirements.txt
       - name: Download public XAUUSD M1 evaluation sample
         run: |
           set -euo pipefail
@@ -57,7 +70,12 @@ jobs:
           Path("data/getdata/audit.json").write_text(json.dumps(report, indent=2))
           print(json.dumps(report, indent=2))
           PY
-      - name: Preserve pilot dataset
+      - name: Run chronological M30 and H1 research evaluations
+        run: |
+          python backend/getdata_research_evaluation.py \
+            --input data/getdata/XAUUSD_1m.csv \
+            --output data/getdata/research_evaluation.json
+      - name: Preserve dataset and evaluation reports
         uses: actions/upload-artifact@v4
         with:
           name: getdata-xauusd-m1-pilot
