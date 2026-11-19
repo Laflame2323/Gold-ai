@@ -23,3 +23,20 @@ jobs:
       - name: Run gradient boosting research tests
         working-directory: backend
         run: python -m unittest -v test_gradient_boosting_research
+      - name: Download audited public XAUUSD M1 sample
+        run: |
+          mkdir -p data/getdata
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://raw.githubusercontent.com/getdata-finance/xauusd-1m-ohlcv-metals-historical-data/main/XAUUSD_1m.csv \
+            --output data/getdata/XAUUSD_1m.csv
+      - name: Evaluate chronological M30 and H1 candidates
+        run: |
+          python backend/getdata_research_evaluation.py \
+            --input data/getdata/XAUUSD_1m.csv \
+            --output data/getdata/research_evaluation.json
+      - name: Preserve research evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-ai-getdata-research-evaluation
+          path: data/getdata/
+          retention-days: 14
