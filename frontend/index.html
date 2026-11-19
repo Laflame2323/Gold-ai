@@ -181,6 +181,34 @@
         </section>
       </div>
 
+
+      <section class="panel research-panel" id="training-lab">
+        <div class="panel-heading">
+          <div><p class="eyebrow">MODEL DEVELOPMENT · HISTORICAL DATA</p><h2>AI research &amp; training</h2></div>
+          <span class="small-tag">RESEARCH ONLY</span>
+        </div>
+        <div class="research-intro">
+          <div><strong>Multi-timeframe model evaluation</strong><p>Train an experimental candidate on earlier candles, select settings on validation data, then score a later untouched test period.</p></div>
+          <button class="primary-button research-run-button" id="runResearchBtn" type="button"><span>✳</span> Run evaluation <b>→</b></button>
+        </div>
+        <div class="research-state" id="researchState" aria-live="polite">No evaluation has been run from this dashboard yet.</div>
+        <div class="research-metrics" id="researchMetrics">
+          <div><span>UNTOUCHED TEST ACCURACY</span><strong id="researchTestAccuracy">—</strong><small id="researchTestSamples">Waiting for evaluation</small></div>
+          <div><span>BALANCED ACCURACY</span><strong id="researchBalancedAccuracy">—</strong><small>Equal weight to up and down classes</small></div>
+          <div><span>MAJORITY BASELINE</span><strong id="researchBaseline">—</strong><small id="researchBaselineGap">Comparison benchmark</small></div>
+          <div><span>ELIGIBLE SAMPLES</span><strong id="researchSamples">—</strong><small id="researchSplits">Train / validation / test</small></div>
+        </div>
+        <div class="research-report" id="researchReport">
+          <div><span>SELECTED TIMEFRAMES</span><strong id="researchTimeframes">—</strong></div>
+          <div><span>MODEL STATUS</span><strong id="researchModelStatus">Not trained</strong></div>
+          <div><span>DATA SOURCE</span><strong id="researchSource">Authenticated MT5 archive required</strong></div>
+          <div><span>TEST PERIOD</span><strong id="researchTestStatus">Not evaluated</strong></div>
+        </div>
+        <div class="history-heading"><strong>Recent evaluation history</strong><span>Saved on this device</span></div>
+        <div class="research-history" id="researchHistory"><p>No saved evaluations yet. Results will appear here after your first run.</p></div>
+        <p class="research-disclaimer">Important: this is a research candidate, not a deployed or live AI model. Accuracy is historical, not a prediction of future performance. No spread, commission, slippage or swap costs are included. No trades are placed.</p>
+      </section>
+
       <section class="lower-grid">
         <section class="panel data-panel">
           <div class="panel-heading"><div><p class="eyebrow">FEED INFORMATION</p><h2>Market data status</h2></div><span class="small-tag">READ ONLY</span></div>
