@@ -166,27 +166,56 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
                 "split_samples": sizes}
     weights = np.asarray(_weights(train_y), dtype=np.float64)
     candidates = []
+    validation_y = [meta_y[k] for k in validation]
+
+    # Compare two model families using validation only. The chronological test
+    # block remains untouched until the final selected candidate is scored.
     for leaves in (7, 15, 31):
         for rate in (0.03, 0.07):
-            model = HistGradientBoostingClassifier(
+            candidate = HistGradientBoostingClassifier(
                 max_iter=200, learning_rate=rate, max_leaf_nodes=leaves,
                 l2_regularization=1.0, early_stopping=False, random_state=23,
             )
-            model.fit(x[train], np.asarray(train_y), sample_weight=weights)
-            pred = model.predict(x[validation]).astype(int).tolist()
+            candidate.fit(x[train], np.asarray(train_y), sample_weight=weights)
+            pred = candidate.predict(x[validation]).astype(int).tolist()
             candidates.append({
+                "model_family": "hist_gradient_boosting",
                 "max_leaf_nodes": leaves, "learning_rate": rate,
-                "validation": _metrics([meta_y[k] for k in validation], pred),
+                "validation": _metrics(validation_y, pred),
             })
+
+    from sklearn.ensemble import ExtraTreesClassifier
+    for depth in (8, 12):
+        candidate = ExtraTreesClassifier(
+            n_estimators=160, max_depth=depth, min_samples_leaf=20,
+            max_features=0.8, n_jobs=1, random_state=23,
+        )
+        candidate.fit(x[train], np.asarray(train_y), sample_weight=weights)
+        pred = candidate.predict(x[validation]).astype(int).tolist()
+        candidates.append({
+            "model_family": "extra_trees",
+            "max_depth": depth, "n_estimators": 160,
+            "min_samples_leaf": 20, "max_features": 0.8,
+            "validation": _metrics(validation_y, pred),
+        })
+
     best = max(candidates, key=lambda c: (
-        c["validation"]["balanced_accuracy_pct"], c["validation"]["accuracy_pct"],
-        -c["max_leaf_nodes"], -c["learning_rate"],
+        c["validation"]["balanced_accuracy_pct"],
+        c["validation"]["accuracy_pct"],
+        c["model_family"] == "hist_gradient_boosting",
     ))
-    model = HistGradientBoostingClassifier(
-        max_iter=200, learning_rate=best["learning_rate"],
-        max_leaf_nodes=best["max_leaf_nodes"], l2_regularization=1.0,
-        early_stopping=False, random_state=23,
-    )
+    if best["model_family"] == "extra_trees":
+        model = ExtraTreesClassifier(
+            n_estimators=best["n_estimators"], max_depth=best["max_depth"],
+            min_samples_leaf=best["min_samples_leaf"],
+            max_features=best["max_features"], n_jobs=1, random_state=23,
+        )
+    else:
+        model = HistGradientBoostingClassifier(
+            max_iter=200, learning_rate=best["learning_rate"],
+            max_leaf_nodes=best["max_leaf_nodes"], l2_regularization=1.0,
+            early_stopping=False, random_state=23,
+        )
     model.fit(x[train], np.asarray(train_y), sample_weight=weights)
     test_prob = model.predict_proba(x[test])[:, list(model.classes_).index(1)]
     test_pred = model.predict(x[test]).astype(int).tolist()
@@ -214,11 +243,18 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
         development = train + validation
         development_y = [meta_y[k] for k in development]
         development_weights = np.asarray(_weights(development_y), dtype=np.float64)
-        external_candidate = HistGradientBoostingClassifier(
-            max_iter=200, learning_rate=best["learning_rate"],
-            max_leaf_nodes=best["max_leaf_nodes"], l2_regularization=1.0,
-            early_stopping=False, random_state=23,
-        )
+        if best["model_family"] == "extra_trees":
+            external_candidate = ExtraTreesClassifier(
+                n_estimators=best["n_estimators"], max_depth=best["max_depth"],
+                min_samples_leaf=best["min_samples_leaf"],
+                max_features=best["max_features"], n_jobs=1, random_state=23,
+            )
+        else:
+            external_candidate = HistGradientBoostingClassifier(
+                max_iter=200, learning_rate=best["learning_rate"],
+                max_leaf_nodes=best["max_leaf_nodes"], l2_regularization=1.0,
+                early_stopping=False, random_state=23,
+            )
         external_candidate.fit(
             x[development], np.asarray(development_y),
             sample_weight=development_weights,
@@ -264,9 +300,7 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
             max(test_y.count(0), test_y.count(1)) / len(test_y) * 100, 2),
         "confidence_coverage": thresholds,
         "validation_candidates": candidates,
-        "selected_parameters": {"max_leaf_nodes": best["max_leaf_nodes"],
-                                "learning_rate": best["learning_rate"],
-                                "max_iter": 200, "class_weighting": "inverse_frequency"},
+        "selected_parameters": {key: value for key, value in best.items() if key != "validation"},
         "feature_names": sample["aligned"]["feature_names"] + SMC_FEATURE_NAMES,
         "feature_groups": {"existing_multi_timeframe": len(sample["aligned"]["feature_names"]),
                            "causal_smc_price_action": len(SMC_FEATURE_NAMES)},
@@ -279,5 +313,6 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
             "Same-bar touches of both horizontal barriers are labeled neutral.",
             "Test is chronological but is not a newly collected future period.",
             "Probabilities are not calibrated.",
+            "Model family and hyperparameters are selected on validation data only; the test block is not used for selection.",
         ],
     }
