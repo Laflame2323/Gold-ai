@@ -316,3 +316,155 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
             "Model family and hyperparameters are selected on validation data only; the test block is not used for selection.",
         ],
     }
+
+
+def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
+                                          pt_atr=1.5, sl_atr=1.0,
+                                          base_timeframe="M30",
+                                          confidence_threshold=0.65):
+    """Expanding-window forward test; fixed threshold is never tuned on scored folds."""
+    from sklearn.ensemble import HistGradientBoostingClassifier, ExtraTreesClassifier
+
+    if not 0.50 <= confidence_threshold <= 0.95:
+        raise ValueError("confidence_threshold must be between 0.50 and 0.95")
+    sample, error = _make_samples(
+        candles_by_timeframe, horizon, float(pt_atr), float(sl_atr), base_timeframe
+    )
+    if error:
+        return error
+
+    decisions = sample["decisions"]
+    outcomes, sides, x = sample["outcomes"], sample["sides"], sample["x"]
+    meta_y = [int(outcomes[k] == sides[k]) for k in range(len(outcomes))]
+    start, end = min(decisions), max(decisions) + 1
+    span = end - start
+    train_edge = start + int(span * 0.70)
+    validation_edge = start + int(span * 0.85)
+    train = [k for k in range(len(decisions)) if sample["label_ends"][k] < train_edge]
+    validation = [k for k, d in enumerate(decisions)
+                  if d >= train_edge and d < validation_edge
+                  and sample["label_ends"][k] < validation_edge]
+    if min(len(train), len(validation)) < MIN_ROWS_PER_SPLIT:
+        return {"status": "insufficient_data", "eligible_samples": len(decisions),
+                "split_samples": {"initial_train": len(train), "validation": len(validation)},
+                "minimum_samples_per_split": MIN_ROWS_PER_SPLIT}
+    train_y = [meta_y[k] for k in train]
+    if len(set(train_y)) < 2:
+        return {"status": "insufficient_data", "message": "Initial training labels contain only one class."}
+
+    candidates = []
+    validation_y = [meta_y[k] for k in validation]
+    for leaves in (7, 15, 31):
+        for rate in (0.03, 0.07):
+            candidate = HistGradientBoostingClassifier(
+                max_iter=200, learning_rate=rate, max_leaf_nodes=leaves,
+                l2_regularization=1.0, early_stopping=False, random_state=23,
+            )
+            candidate.fit(x[train], np.asarray(train_y),
+                          sample_weight=np.asarray(_weights(train_y)))
+            pred = candidate.predict(x[validation]).astype(int).tolist()
+            candidates.append({"family": "hist_gradient_boosting", "leaves": leaves,
+                               "rate": rate, "metrics": _metrics(validation_y, pred)})
+    for depth in (8, 12):
+        candidate = ExtraTreesClassifier(
+            n_estimators=160, max_depth=depth, min_samples_leaf=20,
+            max_features=0.8, n_jobs=1, random_state=23,
+        )
+        candidate.fit(x[train], np.asarray(train_y),
+                      sample_weight=np.asarray(_weights(train_y)))
+        pred = candidate.predict(x[validation]).astype(int).tolist()
+        candidates.append({"family": "extra_trees", "depth": depth,
+                           "metrics": _metrics(validation_y, pred)})
+    best = max(candidates, key=lambda c: (
+        c["metrics"]["balanced_accuracy_pct"], c["metrics"]["accuracy_pct"],
+        c["family"] == "hist_gradient_boosting",
+    ))
+
+    def make_model():
+        if best["family"] == "extra_trees":
+            return ExtraTreesClassifier(
+                n_estimators=160, max_depth=best["depth"], min_samples_leaf=20,
+                max_features=0.8, n_jobs=1, random_state=23,
+            )
+        return HistGradientBoostingClassifier(
+            max_iter=200, learning_rate=best["rate"], max_leaf_nodes=best["leaves"],
+            l2_regularization=1.0, early_stopping=False, random_state=23,
+        )
+
+    folds = []
+    # Three consecutive, non-overlapping future blocks. The threshold is fixed
+    # in advance; each model is refit only on labels fully resolved before its block.
+    fold_edges = [validation_edge + int(span * fraction)
+                  for fraction in (0.05, 0.10, 0.15)] + [end + 1]
+    previous_edge = validation_edge
+    for fold_number, next_edge in enumerate(fold_edges, start=1):
+        test_rows = [k for k, d in enumerate(decisions)
+                     if d >= previous_edge and d < next_edge]
+        fit_rows = [k for k in range(len(decisions))
+                    if sample["label_ends"][k] < previous_edge]
+        if len(test_rows) < 30 or len(fit_rows) < MIN_ROWS_PER_SPLIT:
+            folds.append({"fold": fold_number, "status": "insufficient_data",
+                          "training_samples": len(fit_rows), "test_samples": len(test_rows)})
+            previous_edge = next_edge
+            continue
+        fit_y = [meta_y[k] for k in fit_rows]
+        if len(set(fit_y)) < 2:
+            folds.append({"fold": fold_number, "status": "insufficient_data",
+                          "message": "Training labels contain only one class."})
+            previous_edge = next_edge
+            continue
+        model = make_model()
+        model.fit(x[fit_rows], np.asarray(fit_y),
+                  sample_weight=np.asarray(_weights(fit_y)))
+        probabilities = model.predict_proba(x[test_rows])[:, list(model.classes_).index(1)]
+        actual = [meta_y[k] for k in test_rows]
+        accepted = [i for i, probability in enumerate(probabilities)
+                    if probability >= confidence_threshold]
+        wins = sum(actual[i] for i in accepted)
+        folds.append({
+            "fold": fold_number, "status": "complete",
+            "training_samples": len(fit_rows), "test_samples": len(test_rows),
+            "accepted_samples": len(accepted),
+            "coverage_pct": round(len(accepted) / len(test_rows) * 100, 2),
+            "accepted_trade_win_rate_pct": round(wins / len(accepted) * 100, 2) if accepted else None,
+            "all_setup_win_rate_pct": round(sum(actual) / len(actual) * 100, 2),
+            "balanced_accuracy_pct": _metrics(actual, model.predict(x[test_rows]).astype(int).tolist())["balanced_accuracy_pct"],
+        })
+        previous_edge = next_edge
+
+    valid = [fold for fold in folds if fold["status"] == "complete"]
+    total_test = sum(f["test_samples"] for f in valid)
+    total_accepted = sum(f["accepted_samples"] for f in valid)
+    total_wins = sum(
+        0 for _ in []  # aggregate win count is computed below from fold rates/counts
+    )
+    weighted_wins = sum(
+        round(f["accepted_samples"] * f["accepted_trade_win_rate_pct"] / 100)
+        for f in valid if f["accepted_trade_win_rate_pct"] is not None
+    )
+    return {
+        "status": "complete" if len(valid) == 3 else "partial",
+        "model_type": "expanding_window_triple_barrier_meta_model",
+        "confidence_threshold_fixed": confidence_threshold,
+        "initial_training_samples": len(train),
+        "initial_validation_samples": len(validation),
+        "selected_parameters": {k: v for k, v in best.items() if k != "metrics"},
+        "validation_selection_metrics": best["metrics"],
+        "folds": folds,
+        "aggregate": {
+            "completed_folds": len(valid), "test_samples": total_test,
+            "accepted_samples": total_accepted,
+            "coverage_pct": round(total_accepted / total_test * 100, 2) if total_test else None,
+            "accepted_trade_win_rate_pct": round(weighted_wins / total_accepted * 100, 2) if total_accepted else None,
+        },
+        "threshold_selection_note": "65% is held fixed for every forward fold; no fold results are used to tune it.",
+        "training_is_expanding": True, "test_blocks_non_overlapping": True,
+        "purge_overlapping_labels": True, "research_only": True, "read_only": True,
+        "production_model_persisted": False, "execution_enabled": False,
+        "caveats": [
+            "Forward folds are later sections of the same authenticated archive, not newly collected live data.",
+            "Model hyperparameters are selected using only the initial training and validation periods.",
+            "No spread, commission, slippage or swap costs are included.",
+            "A confidence score is not a calibrated probability or a guarantee of profitability.",
+        ],
+    }
