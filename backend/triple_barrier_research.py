@@ -323,7 +323,7 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
                                           base_timeframe="M30",
                                           confidence_threshold=0.65):
     """Expanding-window forward test; fixed threshold is never tuned on scored folds."""
-    from sklearn.ensemble import HistGradientBoostingClassifier, ExtraTreesClassifier
+    from sklearn.ensemble import HistGradientBoostingClassifier
 
     if not 0.50 <= confidence_threshold <= 0.95:
         raise ValueError("confidence_threshold must be between 0.50 and 0.95")
@@ -354,40 +354,25 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
 
     candidates = []
     validation_y = [meta_y[k] for k in validation]
-    for leaves in (7, 15, 31):
-        for rate in (0.03, 0.07):
-            candidate = HistGradientBoostingClassifier(
-                max_iter=200, learning_rate=rate, max_leaf_nodes=leaves,
-                l2_regularization=1.0, early_stopping=False, random_state=23,
-            )
-            candidate.fit(x[train], np.asarray(train_y),
-                          sample_weight=np.asarray(_weights(train_y)))
-            pred = candidate.predict(x[validation]).astype(int).tolist()
-            candidates.append({"family": "hist_gradient_boosting", "leaves": leaves,
-                               "rate": rate, "metrics": _metrics(validation_y, pred)})
-    for depth in (8, 12):
-        candidate = ExtraTreesClassifier(
-            n_estimators=160, max_depth=depth, min_samples_leaf=20,
-            max_features=0.8, n_jobs=1, random_state=23,
+    # Keep the forward-test path responsive on the free research instance.
+    # Two compact HGB candidates are compared on validation only.
+    for leaves, rate in ((7, 0.05), (15, 0.05)):
+        candidate = HistGradientBoostingClassifier(
+            max_iter=60, learning_rate=rate, max_leaf_nodes=leaves,
+            l2_regularization=1.0, early_stopping=False, random_state=23,
         )
         candidate.fit(x[train], np.asarray(train_y),
                       sample_weight=np.asarray(_weights(train_y)))
         pred = candidate.predict(x[validation]).astype(int).tolist()
-        candidates.append({"family": "extra_trees", "depth": depth,
-                           "metrics": _metrics(validation_y, pred)})
+        candidates.append({"family": "hist_gradient_boosting", "leaves": leaves,
+                           "rate": rate, "metrics": _metrics(validation_y, pred)})
     best = max(candidates, key=lambda c: (
         c["metrics"]["balanced_accuracy_pct"], c["metrics"]["accuracy_pct"],
-        c["family"] == "hist_gradient_boosting",
     ))
 
     def make_model():
-        if best["family"] == "extra_trees":
-            return ExtraTreesClassifier(
-                n_estimators=160, max_depth=best["depth"], min_samples_leaf=20,
-                max_features=0.8, n_jobs=1, random_state=23,
-            )
         return HistGradientBoostingClassifier(
-            max_iter=200, learning_rate=best["rate"], max_leaf_nodes=best["leaves"],
+            max_iter=60, learning_rate=best["rate"], max_leaf_nodes=best["leaves"],
             l2_regularization=1.0, early_stopping=False, random_state=23,
         )
 
