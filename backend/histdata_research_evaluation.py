@@ -51,6 +51,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="Audited UTC HistData parquet")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--candidate-model-output", required=True)
     args = parser.parse_args()
 
     source = Path(args.input)
@@ -76,6 +77,7 @@ def main():
         "research_only": True,
         "read_only": True,
         "candidate_model_trained": False,
+        "candidate_model_saved_for_external_test": False,
         "production_model_persisted": False,
         "execution_enabled": False,
         "evaluations": {},
@@ -95,11 +97,15 @@ def main():
             pt_atr=1.5,
             sl_atr=1.0,
             base_timeframe=base_tf,
+            candidate_model_path=str(Path(args.candidate_model_output).with_name(
+                f"gold_ai_{base_tf.lower()}_histdata_candidate.joblib"
+            )),
         )
         report["evaluations"][base_tf] = result
         if result.get("status") != "complete":
             raise SystemExit(f"{base_tf} evaluation incomplete: {result}")
         report["candidate_model_trained"] = True
+        report["candidate_model_saved_for_external_test"] = True
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
