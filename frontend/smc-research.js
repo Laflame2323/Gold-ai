@@ -50,6 +50,76 @@
     }
   }
 
+
+  function renderConfidenceCoverage(rows) {
+    const metrics = $("researchMetrics");
+    if (!metrics) return;
+    let panel = $("researchConfidenceCoverage");
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = "researchConfidenceCoverage";
+      panel.setAttribute("aria-label", "Confidence threshold performance");
+      panel.style.cssText = "margin:18px 0;padding:18px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(15,23,42,.42);";
+      const heading = document.createElement("div");
+      heading.style.cssText = "display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;";
+      const title = document.createElement("strong");
+      title.textContent = "CONFIDENCE THRESHOLD ANALYSIS";
+      title.style.cssText = "font-size:12px;letter-spacing:.08em;";
+      const note = document.createElement("small");
+      note.textContent = "Unseen test setups · higher threshold means fewer accepted signals";
+      note.style.cssText = "color:var(--muted,#94a3b8);font-size:11px;";
+      heading.append(title, note);
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = "overflow-x:auto;";
+      const table = document.createElement("table");
+      table.id = "researchConfidenceTable";
+      table.style.cssText = "width:100%;border-collapse:collapse;min-width:480px;font-size:12px;text-align:left;";
+      wrapper.appendChild(table);
+      panel.append(heading, wrapper);
+      metrics.insertAdjacentElement("afterend", panel);
+    }
+    const table = $("researchConfidenceTable");
+    if (!table) return;
+    table.replaceChildren();
+    const head = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["MINIMUM MODEL SCORE", "ACCEPTED SETUPS", "TEST COVERAGE", "WIN RATE"].forEach((label) => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      th.style.cssText = "padding:10px 8px;border-bottom:1px solid rgba(148,163,184,.22);color:var(--muted,#94a3b8);font-size:10px;letter-spacing:.05em;white-space:nowrap;";
+      headerRow.appendChild(th);
+    });
+    head.appendChild(headerRow);
+    table.appendChild(head);
+    const body = document.createElement("tbody");
+    (Array.isArray(rows) ? rows : []).forEach((item) => {
+      const tr = document.createElement("tr");
+      const values = [
+        pct(Number(item.meta_probability_threshold) * 100),
+        Number(item.accepted_trades || 0).toLocaleString(),
+        pct(item.coverage_pct),
+        pct(item.accepted_trade_win_rate_pct)
+      ];
+      values.forEach((value, index) => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        td.style.cssText = "padding:11px 8px;border-bottom:1px solid rgba(148,163,184,.12);font-variant-numeric:tabular-nums;" + (index === 3 ? "font-weight:700;" : "");
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+    if (!body.children.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 4;
+      td.textContent = "Threshold results were not returned by the research API.";
+      td.style.cssText = "padding:12px 8px;color:var(--muted,#94a3b8);";
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+  }
+
   function render(data) {
     const model = data.meta_model_test || {};
     const baseline = data.test_majority_baseline_accuracy_pct;
@@ -61,6 +131,7 @@
     const winRate = threshold ? threshold.accepted_trade_win_rate_pct : null;
     const accepted = threshold ? threshold.accepted_trades : 0;
     const coverage = threshold ? threshold.coverage_pct : 0;
+    renderConfidenceCoverage(data.confidence_coverage);
     const gap = Number.isFinite(Number(model.accuracy_pct)) && Number.isFinite(Number(baseline))
       ? Number(model.accuracy_pct) - Number(baseline) : null;
 
