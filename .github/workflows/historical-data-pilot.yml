@@ -153,7 +153,25 @@ jobs:
         run: |
           python backend/histdata_research_evaluation.py \
             --input data/histdata_normalized/xauusd_histdata_m1_utc.parquet \
-            --output data/histdata_normalized/research_evaluation.json
+            --output data/histdata_normalized/research_evaluation.json \
+            --candidate-model-output data/histdata_normalized/candidate_placeholder.joblib
+      - name: Download separate 2026 external XAUUSD sample
+        run: |
+          set -euo pipefail
+          mkdir -p data/getdata_external
+          curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            "https://raw.githubusercontent.com/getdata-finance/xauusd-1m-ohlcv-metals-historical-data/main/XAUUSD_1m.csv" \
+            -o data/getdata_external/XAUUSD_1m.csv
+          test -s data/getdata_external/XAUUSD_1m.csv
+      - name: Score saved HistData candidates on external data without refitting
+        run: |
+          set -euo pipefail
+          for timeframe in m30 h1; do
+            python backend/saved_candidate_external_evaluation.py \
+              --input data/getdata_external/XAUUSD_1m.csv \
+              --candidate-model "data/histdata_normalized/gold_ai_${timeframe}_histdata_candidate.joblib" \
+              --output "data/histdata_normalized/getdata_external_${timeframe}_evaluation.json"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
