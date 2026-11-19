@@ -4,8 +4,9 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from datetime import datetime, timezone
 from pydantic import ValidationError
-from mt5_ingest import MT5Batch, normalise_mt5_batch, archive_mt5_batch
-from main import ingest_mt5_candles
+from mt5_ingest import MT5Batch, normalise_mt5_batch, archive_mt5_batch, MT5TickBatch, archive_mt5_tick_batch
+import time
+from main import ingest_mt5_candles, ingest_mt5_ticks
 
 
 class MT5IngestionTests(unittest.TestCase):
@@ -149,3 +150,68 @@ class MT5IngestionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MT5TickIngestionTests(unittest.TestCase):
+    def test_valid_tick_batch_is_accepted_and_timestamp_is_milliseconds(self):
+        now_msc = int(time.time() * 1000)
+        batch = MT5TickBatch.model_validate({
+            "broker_server": "Exness-MT5Trial9",
+            "symbol": "XAUUSDm",
+            "server_utc_offset_seconds": 0,
+            "ticks": [{
+                "time_msc": now_msc,
+                "bid": 4300.10, "ask": 4300.25, "last": None,
+                "volume": 0, "volume_real": 0, "flags": 6
+            }]
+        })
+        self.assertEqual(batch.ticks[0].time_msc, now_msc)
+
+    def test_invalid_crossed_quote_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            MT5TickBatch.model_validate({
+                "broker_server": "Exness-MT5Trial9",
+                "symbol": "XAUUSDm",
+                "server_utc_offset_seconds": 0,
+                "ticks": [{"time_msc": int(time.time() * 1000),
+                           "bid": 4301, "ask": 4300, "flags": 6}]
+            })
+
+    def test_tick_batch_is_limited_to_500(self):
+        now_msc = int(time.time() * 1000)
+        with self.assertRaises(ValidationError):
+            MT5TickBatch.model_validate({
+                "broker_server": "Exness-MT5Trial9",
+                "symbol": "XAUUSDm",
+                "server_utc_offset_seconds": 0,
+                "ticks": [{"time_msc": now_msc + i, "bid": 4300, "ask": 4301}
+                          for i in range(501)]
+            })
+
+    def test_tick_archive_writes_to_isolated_research_table(self):
+        now_msc = int(time.time() * 1000)
+        batch = MT5TickBatch.model_validate({
+            "broker_server": "Exness-MT5Trial9",
+            "symbol": "XAUUSDm",
+            "server_utc_offset_seconds": 0,
+            "ticks": [{"time_msc": now_msc, "bid": 4300.1, "ask": 4300.2, "flags": 6}]
+        })
+        with patch("mt5_ingest._archive_reference_rows",
+                   return_value={"status": "saved", "rows_sent": 1}) as archive:
+            result = archive_mt5_tick_batch(batch)
+        self.assertEqual(result["status"], "saved")
+        self.assertEqual(archive.call_args.args[0], "mt5_ticks_research")
+        self.assertEqual(archive.call_args.args[2], "symbol,source,tick_key")
+
+    def test_tick_endpoint_requires_authentication(self):
+        now_msc = int(time.time() * 1000)
+        batch = MT5TickBatch.model_validate({
+            "broker_server": "Exness-MT5Trial9",
+            "symbol": "XAUUSDm",
+            "server_utc_offset_seconds": 0,
+            "ticks": [{"time_msc": now_msc, "bid": 4300.1, "ask": 4300.2}]
+        })
+        with patch.dict(os.environ, {"MT5_INGEST_TOKEN": ""}):
+            with self.assertRaises(HTTPException) as error:
+                ingest_mt5_ticks(batch, None)
+        self.assertEqual(error.exception.status_code, 503)
