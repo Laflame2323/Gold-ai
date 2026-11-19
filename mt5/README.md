@@ -7,7 +7,7 @@ The `GoldAI_ReadOnly_Bridge.mq5` Expert Advisor sends **completed XAUUSD candles
 1. Gold AI's backend must have the private Render environment variable `MT5_INGEST_TOKEN` configured.
 2. Generate a random secret of at least 32 bytes. Add it only to Render's environment variable `MT5_INGEST_TOKEN`, then enter the same value locally in the EA input `IngestToken`. Never send it in chat, screenshots, or GitHub.
 3. In desktop MT5, open **Tools → Options → Expert Advisors** and enable **Allow WebRequest for listed URL**. Add:
-   `https://gold-ai-backend-p9el.onrender.com`
+   `https://gold-ai-mtf-research.onrender.com`
 4. Open **File → Open Data Folder → MQL5 → Experts** and copy `GoldAI_ReadOnly_Bridge.mq5` there.
 5. Open MetaEditor, compile the EA, and return to MT5.
 6. Attach the EA to your broker's gold chart (for example `XAUUSD`, `XAUUSDm`, or `GOLD`). It uses the chart's exact symbol automatically.
