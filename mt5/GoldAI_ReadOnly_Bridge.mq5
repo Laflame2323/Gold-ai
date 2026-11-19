@@ -1,12 +1,12 @@
 // Gold AI — read-only MetaTrader 5 market-data bridge
 // Sends completed candles only. This EA never opens, modifies, or closes trades.
-// Add https://gold-ai-backend-p9el.onrender.com to MT5 WebRequest allowed URLs.
+// Add https://gold-ai-mtf-research.onrender.com to MT5 WebRequest allowed URLs.
 
 #property strict
 #property version   "1.20"
 #property description "Gold AI read-only candle uploader"
 
-input string IngestURL = "https://gold-ai-backend-p9el.onrender.com/broker/mt5/candles";
+input string IngestURL = "https://gold-ai-mtf-research.onrender.com/broker/mt5/candles";
 input string IngestToken = "";
 input int    BarsToSend = 50000;
 input int    UploadChunkSize = 5000;
