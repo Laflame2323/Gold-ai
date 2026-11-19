@@ -553,11 +553,11 @@ async function runResearchEvaluation() {
   const state = $("researchState");
   button.disabled = true;
   button.innerHTML = "<span>✳</span> Evaluating... <b>…</b>";
-  state.textContent = "Loading the research archive (3,000 H1 candles). This usually takes under a minute.";
+  state.textContent = "Loading the MT5 research archive and testing a gradient-boosting candidate. This may take a minute.";
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 120000);
   try {
-    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=3000", {
+    const response = await fetch(API_URL + "/research/ml/evaluate-gradient-boosting-mtf?horizon=5&min_move_pct=0", {
       cache: "no-store",
       signal: controller.signal
     });
@@ -571,7 +571,7 @@ async function runResearchEvaluation() {
   } finally {
     clearTimeout(timeoutId);
     button.disabled = false;
-    button.innerHTML = "<span>✳</span> Run evaluation <b>→</b>";
+    button.innerHTML = "<span>✳</span> Test improved model <b>→</b>";
   }
 }
 
