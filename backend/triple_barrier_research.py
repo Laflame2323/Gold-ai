@@ -436,13 +436,7 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
     valid = [fold for fold in folds if fold["status"] == "complete"]
     total_test = sum(f["test_samples"] for f in valid)
     total_accepted = sum(f["accepted_samples"] for f in valid)
-    total_wins = sum(
-        0 for _ in []  # aggregate win count is computed below from fold rates/counts
-    )
-    weighted_wins = sum(
-        round(f["accepted_samples"] * f["accepted_trade_win_rate_pct"] / 100)
-        for f in valid if f["accepted_trade_win_rate_pct"] is not None
-    )
+    weighted_wins = sum(f["accepted_wins"] for f in valid)
     return {
         "status": "complete" if len(valid) == 3 else "partial",
         "model_type": "expanding_window_triple_barrier_meta_model",
