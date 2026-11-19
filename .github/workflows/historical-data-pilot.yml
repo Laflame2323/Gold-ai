@@ -57,7 +57,8 @@ jobs:
               "research_only": True,
               "production_model_persisted": False,
               "execution_enabled": False,
-              "files": []
+              "files": [],
+              "duplicate_policy": "identical duplicate bars deduplicated; conflicting timestamp groups excluded and reported"
           }
 
           for path in sorted(raw_dir.glob("*.csv")):
@@ -90,19 +91,34 @@ jobs:
               )
               if not valid.all():
                   raise ValueError(f"{path.name}: {int((~valid).sum())} invalid OHLC rows")
-              duplicates = int(frame["timestamp"].duplicated().sum())
-              if duplicates:
-                  raise ValueError(f"{path.name}: {duplicates} duplicate timestamps")
+              dup_mask = frame["timestamp"].duplicated(keep=False)
+              dup_rows = frame.loc[dup_mask].sort_values("timestamp")
+              conflict_times = []
+              exact_duplicate_rows_removed = 0
+              if not dup_rows.empty:
+                  nunique = dup_rows.groupby("timestamp")[["open","high","low","close"]].nunique()
+                  conflict_times = nunique.index[(nunique > 1).any(axis=1)].tolist()
+                  dup_rows.to_csv(out_dir / f"duplicates_{path.stem}.csv", index=False)
+                  conflict_mask = frame["timestamp"].isin(conflict_times)
+                  conflict_rows = int(conflict_mask.sum())
+                  safe = frame.loc[~conflict_mask]
+                  before = len(safe)
+                  safe = safe.drop_duplicates(subset=["timestamp"], keep="first")
+                  exact_duplicate_rows_removed = before - len(safe)
+                  frame = pd.concat([safe, frame.loc[conflict_mask].iloc[0:0]], ignore_index=True)
               if not frame["timestamp"].is_monotonic_increasing:
-                  raise ValueError(f"{path.name}: timestamps are not sorted")
+                  frame = frame.sort_values("timestamp").reset_index(drop=True)
               diffs = frame["timestamp"].diff().dropna().dt.total_seconds().div(60)
               row = {
                   "file": path.name,
-                  "rows": int(len(frame)),
+                  "rows_raw": int(len(raw)),
+                  "rows_usable": int(len(frame)),
                   "first_utc": frame["timestamp"].iloc[0].isoformat(),
                   "last_utc": frame["timestamp"].iloc[-1].isoformat(),
                   "sha256": digest,
-                  "duplicate_timestamps": duplicates,
+                  "duplicate_rows_detected": int(dup_mask.sum()),
+                  "exact_duplicate_rows_removed": int(exact_duplicate_rows_removed),
+                  "conflicting_duplicate_timestamps_excluded": int(len(conflict_times)),
                   "invalid_ohlc_rows": int((~valid).sum()),
                   "gaps_over_1m": int((diffs > 1).sum()),
                   "max_gap_minutes": float(diffs.max()) if len(diffs) else 0,
@@ -113,17 +129,28 @@ jobs:
               all_frames.append(frame)
               print(json.dumps(row))
           combined = pd.concat(all_frames, ignore_index=True).sort_values("timestamp")
-          if combined["timestamp"].duplicated().any():
-              raise ValueError("duplicate timestamps across annual files")
+          cross_dup = combined["timestamp"].duplicated(keep=False)
+          cross_conflict_times = []
+          if cross_dup.any():
+              duplicate_rows = combined.loc[cross_dup]
+              nunique = duplicate_rows.groupby("timestamp")[["open","high","low","close"]].nunique()
+              cross_conflict_times = nunique.index[(nunique > 1).any(axis=1)].tolist()
+              duplicate_rows.to_csv(out_dir / "cross_file_duplicates.csv", index=False)
+              combined = combined.loc[~combined["timestamp"].isin(cross_conflict_times)]
+              combined = combined.drop_duplicates(subset=["timestamp"], keep="first")
+          combined = combined.sort_values("timestamp").reset_index(drop=True)
           combined.to_parquet(out_dir / "xauusd_histdata_m1_utc.parquet", index=False, compression="zstd")
           manifest["total_rows"] = int(len(combined))
           manifest["first_utc"] = combined["timestamp"].iloc[0].isoformat()
           manifest["last_utc"] = combined["timestamp"].iloc[-1].isoformat()
+          manifest["cross_file_duplicate_rows_detected"] = int(cross_dup.sum())
+          manifest["cross_file_conflicting_timestamps_excluded"] = int(len(cross_conflict_times))
           manifest["combined_duplicate_timestamps"] = int(combined["timestamp"].duplicated().sum())
           (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
           print(json.dumps({k:v for k,v in manifest.items() if k != "files"}, indent=2))
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: gold-ai-histdata-xauusd-m1-utc-2009-2026jan
           path: |
