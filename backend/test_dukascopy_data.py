@@ -27,7 +27,7 @@ class DukascopyDataTests(unittest.TestCase):
         b = {"open": 2000.0, "high": 2002.0, "low": 1999.0, "close": 2001.0, "volume": 10.0}
         a = {"open": 2000.2, "high": 2002.2, "low": 1999.2, "close": 2001.2, "volume": 9.0}
         rows, bid_only, ask_only = merge_bid_ask({60:b, 120:b}, {60:a, 180:a})
-        self.assertEqual(rows[0]["spread_close"], 0.2)
+        self.assertAlmostEqual(rows[0]["spread_close"], 0.2, places=8)
         self.assertEqual((bid_only, ask_only), (1, 1))
 
     def test_reject_crossed_quote(self):
