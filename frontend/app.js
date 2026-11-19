@@ -553,9 +553,9 @@ async function runResearchEvaluation() {
   const state = $("researchState");
   button.disabled = true;
   button.innerHTML = "<span>✳</span> Evaluating... <b>…</b>";
-  state.textContent = "Requesting the research server. This may take a few minutes while historical candles are read and evaluated.";
+  state.textContent = "Loading a larger historical archive (up to 6,000 H1 candles) for a more reliable research test. This may take a few minutes.";
   try {
-    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=3000", { cache: "no-store" });
+    const response = await fetch(API_URL + "/research/ml/evaluate-mtf?horizon=5&min_move_pct=0&archive_limit=6000", { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Research evaluation failed (" + response.status + ").");
     renderResearchResult(data);
