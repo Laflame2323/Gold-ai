@@ -419,6 +419,7 @@ async function analyseGold() {
       signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "wait"
     );
     const researchSignal = String(data.research_signal || "WAIT").toUpperCase();
+    $("signalConfidence").textContent = "Not available · model not trained";
     const technicalBias = String(data.technical_bias || "NEUTRAL").toUpperCase();
     const alignment = Number(data.alignment_score);
     const alignmentText = Number.isFinite(alignment)
