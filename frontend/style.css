@@ -517,3 +517,22 @@ body {
  .research-metrics strong{font-size:19px}
  .history-heading{align-items:flex-start;flex-direction:column;gap:4px}
 }
+
+
+/* Keep the research lab after the live chart in desktop and mobile reading order. */
+.main-content > #training-lab { order: 6; width: 100%; margin-top: 16px; }
+.main-content > .lower-grid { order: 7; }
+.main-content > #market-alerts { order: 8; }
+.main-content > #macro-context { order: 9; }
+.main-content > #cot-positioning { order: 10; }
+.main-content > #assistant { order: 11; }
+.main-content > .page-footer { order: 12; }
+@media(max-width:760px) {
+ .main-content > #training-lab { order: 6; margin-top: 13px; }
+ .main-content > .lower-grid { order: 7; }
+ .main-content > #market-alerts { order: 8; }
+ .main-content > #macro-context { order: 9; }
+ .main-content > #cot-positioning { order: 10; }
+ .main-content > #assistant { order: 11; }
+ .main-content > .page-footer { order: 12; }
+}
