@@ -126,7 +126,8 @@ def _make_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, base_timeframe)
 
 
 def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
-                                 pt_atr=1.5, sl_atr=1.0, base_timeframe="M30"):
+                                 pt_atr=1.5, sl_atr=1.0, base_timeframe="M30",
+                                 candidate_model_path=None):
     from sklearn.ensemble import HistGradientBoostingClassifier
 
     if base_timeframe not in BASE_INTERVALS:
@@ -202,11 +203,49 @@ def evaluate_triple_barrier_meta(candles_by_timeframe, horizon=24,
             "accepted_trade_win_rate_pct": round(wins / count * 100, 2) if count else None,
         })
     primary_accuracy = sum(test_y) / len(test_y) * 100
+
+    candidate_saved = False
+    if candidate_model_path is not None:
+        # Historical test is scored above. Refit only on train + validation
+        # for a later, completely separate external dataset.
+        import joblib
+        from pathlib import Path
+
+        development = train + validation
+        development_y = [meta_y[k] for k in development]
+        development_weights = np.asarray(_weights(development_y), dtype=np.float64)
+        external_candidate = HistGradientBoostingClassifier(
+            max_iter=200, learning_rate=best["learning_rate"],
+            max_leaf_nodes=best["max_leaf_nodes"], l2_regularization=1.0,
+            early_stopping=False, random_state=23,
+        )
+        external_candidate.fit(
+            x[development], np.asarray(development_y),
+            sample_weight=development_weights,
+        )
+        candidate_path = Path(candidate_model_path)
+        candidate_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({
+            "model": external_candidate,
+            "feature_names": sample["aligned"]["feature_names"] + SMC_FEATURE_NAMES,
+            "base_timeframe": base_timeframe,
+            "horizon": horizon,
+            "pt_atr": float(pt_atr),
+            "sl_atr": float(sl_atr),
+            "training_source": "HistData XAUUSD M1 independent historical archive",
+            "training_rows": len(development),
+            "research_only": True,
+            "read_only": True,
+            "execution_enabled": False,
+        }, candidate_path, compress=3)
+        candidate_saved = True
+
     return {
         "status": "complete",
         "model_type": f"atr_triple_barrier_{base_timeframe.lower()}_causal_smc_meta_label_hist_gradient_boosting",
         "base_timeframe": base_timeframe,
         "candidate_model_trained": True, "ai_trained": False,
+        "candidate_model_saved_for_external_test": candidate_saved,
         "production_model_persisted": False,
         "eligible_samples": len(decisions), "split_samples": sizes,
         "barriers": {"profit_target_atr": float(pt_atr), "stop_loss_atr": float(sl_atr),
