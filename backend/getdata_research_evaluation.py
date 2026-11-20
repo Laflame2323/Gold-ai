@@ -295,6 +295,7 @@ def main():
             "selected_confidence_threshold": result.get("selected_confidence_threshold"),
             "validation_trade_metrics": result.get("validation_trade_metrics"),
             "candidate_validation_summary": result.get("candidate_validation_summary"),
+            "provisional_test_diagnostic": result.get("provisional_test_diagnostic"),
             "untouched_test": result.get("untouched_test"),
             "test_cost_sensitivity": result.get("test_cost_sensitivity"),
             "split_samples": result.get("split_samples"),
