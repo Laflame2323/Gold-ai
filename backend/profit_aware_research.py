@@ -23,20 +23,68 @@ def _weights(labels):
     return [len(labels) / (len(counts) * counts[label]) for label in labels]
 
 
-def _trade_returns_r(outcomes, sides, indices, pt_atr, sl_atr, cost_atr):
-    """Return per-setup net R; ambiguous/time-expired setups contribute zero gross R."""
+def _trade_returns_r(outcomes, sides, indices, pt_atr, sl_atr, cost_atr,
+                     gross_returns_r=None):
+    """Return per-setup net R, using realized timeout returns when supplied."""
     cost_r = cost_atr / sl_atr
     values = []
     for index in indices:
-        outcome, side = outcomes[index], sides[index]
-        if outcome == side:
-            gross_r = pt_atr / sl_atr
-        elif outcome == -side:
-            gross_r = -1.0
+        if gross_returns_r is not None:
+            gross_r = float(gross_returns_r[index])
         else:
-            gross_r = 0.0
+            outcome, side = outcomes[index], sides[index]
+            if outcome == side:
+                gross_r = pt_atr / sl_atr
+            elif outcome == -side:
+                gross_r = -1.0
+            else:
+                gross_r = 0.0
         values.append(gross_r - cost_r)
     return values
+
+
+def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
+                                  atr_value, side):
+    """Simulate one direction using executable bid/ask prices when available.
+
+    Ambiguous same-bar target/stop touches assume stop-first. Vertical expiry is
+    marked to the executable close rather than treated as a zero-return trade.
+    """
+    has_ask = all(
+        key in candles[index + offset]
+        for offset in (0, 1)
+        for key in ("ask_open", "ask_high", "ask_low", "ask_close")
+    )
+    entry_candle = candles[index + 1]
+    if side > 0:
+        entry = float(entry_candle.get("ask_open", entry_candle["open"]))
+    else:
+        entry = float(entry_candle["open"])
+    target = entry + side * pt_atr * atr_value
+    stop = entry - side * sl_atr * atr_value
+    outcome = 0
+    for j in range(index + 1, index + horizon + 1):
+        candle = candles[j]
+        if has_ask and side < 0:
+            high, low = float(candle["ask_high"]), float(candle["ask_low"])
+        else:
+            high, low = float(candle["high"]), float(candle["low"])
+        hit_target = (high >= target) if side > 0 else (low <= target)
+        hit_stop = (low <= stop) if side > 0 else (high >= stop)
+        if hit_target and hit_stop:
+            return -side, j, -1.0
+        if hit_target:
+            return side, j, pt_atr / sl_atr
+        if hit_stop:
+            return -side, j, -1.0
+
+    exit_candle = candles[index + horizon]
+    if side > 0:
+        exit_price = float(exit_candle["close"])
+    else:
+        exit_price = float(exit_candle.get("ask_close", exit_candle["close"]))
+    gross_r = side * (exit_price - entry) / (atr_value * sl_atr)
+    return outcome, index + horizon, gross_r
 
 
 def _trade_metrics_r(values, max_range=None):
@@ -82,7 +130,7 @@ def _trade_metrics_r(values, max_range=None):
 
 
 def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
-                       cost_atr, decisions=None):
+                       cost_atr, decisions=None, gross_returns_r=None):
     """Choose one side per validation candle; reject thin or weak candidates."""
     candidates = []
     decision_map = decisions if decisions is not None else list(range(len(outcomes)))
@@ -93,7 +141,8 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
         selected = [row for probability, row in best_by_decision.values()
                     if probability >= threshold]
         values = _trade_returns_r(
-            outcomes, sides, selected, pt_atr, sl_atr, cost_atr
+            outcomes, sides, selected, pt_atr, sl_atr, cost_atr,
+            gross_returns_r=gross_returns_r,
         )
         metrics = _trade_metrics_r(values, max_range=pt_atr / sl_atr + 1.0)
         metrics["coverage_pct"] = round(len(selected) / len(unique_decisions) * 100, 2)
@@ -173,7 +222,7 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
         for i, c in enumerate(base)
     }
     atr = _atr(base, 14)
-    rows, outcomes, sides, decisions, label_ends = [], [], [], [], []
+    rows, outcomes, sides, gross_returns_r, decisions, label_ends = [], [], [], [], [], []
     counts = {"profit_target": 0, "stop_loss": 0, "vertical_or_no_touch": 0,
               "ambiguous_same_bar": 0, "missing_atr": 0}
     for item in aligned["rows"]:
@@ -186,32 +235,25 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
         smc = causal_smc_features(base, i, atr[i])
         regime = _regime_features(base, i, atr)
         calendar = _calendar_features(item["decision_time"])
+        spread_atr = (
+            float(base[i].get("spread", 0.0) or 0.0) / float(atr[i])
+        )
         for side in (-1, 1):
-            entry = float(base[i + 1]["open"])
-            target = entry + side * pt_atr * atr[i]
-            stop = entry - side * sl_atr * atr[i]
-            outcome, end_index = 0, i + horizon
-            for j in range(i + 1, i + horizon + 1):
-                high, low = float(base[j]["high"]), float(base[j]["low"])
-                hit_target = (high >= target) if side > 0 else (low <= target)
-                hit_stop = (low <= stop) if side > 0 else (high >= stop)
-                if hit_target and hit_stop:
-                    counts["ambiguous_same_bar"] += 1
-                    outcome, end_index = 0, j
-                    break
-                if hit_target:
-                    outcome, end_index = side, j
-                    counts["profit_target"] += 1
-                    break
-                if hit_stop:
-                    outcome, end_index = -side, j
-                    counts["stop_loss"] += 1
-                    break
+            outcome, end_index, gross_r = _simulate_directional_barrier(
+                base, i, horizon, pt_atr, sl_atr, float(atr[i]), side
+            )
+            if outcome == side:
+                counts["profit_target"] += 1
+            elif outcome == -side:
+                counts["stop_loss"] += 1
             else:
                 counts["vertical_or_no_touch"] += 1
-            rows.append(item["features"] + smc + regime + calendar + [float(side)])
+            rows.append(
+                item["features"] + smc + regime + calendar + [spread_atr, float(side)]
+            )
             outcomes.append(outcome)
             sides.append(side)
+            gross_returns_r.append(gross_r)
             decisions.append(i)
             label_ends.append(end_index)
     if not rows:
@@ -219,7 +261,8 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
                       "message": "No eligible directional barrier events were aligned."}
     return {
         "x": np.asarray(rows, dtype=np.float64), "outcomes": outcomes,
-        "sides": sides, "decisions": decisions, "label_ends": label_ends,
+        "sides": sides, "gross_returns_r": gross_returns_r,
+        "decisions": decisions, "label_ends": label_ends,
         "aligned": aligned, "counts": counts,
     }, None
 
@@ -255,6 +298,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
 
     decisions = sample["decisions"]
     outcomes, sides, x = sample["outcomes"], sample["sides"], sample["x"]
+    gross_returns_r = sample["gross_returns_r"]
+    cost_r = round_trip_cost_atr / float(sl_atr)
     start, end = min(decisions), max(decisions) + 1
     span = end - start
     train_edge = start + int(span * 0.70)
@@ -288,7 +333,10 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "minimum_samples_per_split": MIN_ROWS_PER_SPLIT,
         }
 
-    labels = [int(outcomes[i] == sides[i]) for i in range(len(outcomes))]
+    labels = [
+        int(gross_returns_r[i] - cost_r > 0)
+        for i in range(len(gross_returns_r))
+    ]
     train_y = [labels[i] for i in train]
     validation_y = [labels[i] for i in validation]
     test_y = [labels[i] for i in test]
@@ -342,6 +390,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         threshold, threshold_table, positive = _select_threshold(
             probabilities, outcomes, sides, validation, pt_atr, sl_atr,
             round_trip_cost_atr, decisions=decisions,
+            gross_returns_r=gross_returns_r,
         )
         chosen = next((row for row in threshold_table if row["threshold"] == threshold), None)
         evaluated.append({
