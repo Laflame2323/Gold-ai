@@ -95,6 +95,9 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                                round_trip_cost_atr=0.0):
     """Train ephemeral candidates and select by validation net expectancy in R."""
     from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
 
     if not math.isfinite(round_trip_cost_atr) or not 0 <= round_trip_cost_atr <= 2:
         raise ValueError("round_trip_cost_atr must be between 0 and 2.")
@@ -146,6 +149,9 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         {"family": "extra_trees", "trees": 160, "depth": depth,
          "min_samples_leaf": 20, "max_features": 0.8}
         for depth in (8, 12)
+    ] + [
+        {"family": "logistic_regression", "C": strength}
+        for strength in (0.1, 1.0, 10.0)
     ]
 
     evaluated = []
@@ -156,13 +162,26 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 max_leaf_nodes=spec["leaves"], l2_regularization=1.0,
                 early_stopping=False, random_state=23,
             )
-        else:
+            model.fit(x[train], np.asarray(train_y), sample_weight=weights)
+        elif spec["family"] == "extra_trees":
             model = ExtraTreesClassifier(
                 n_estimators=spec["trees"], max_depth=spec["depth"],
                 min_samples_leaf=spec["min_samples_leaf"],
                 max_features=spec["max_features"], n_jobs=1, random_state=23,
             )
-        model.fit(x[train], np.asarray(train_y), sample_weight=weights)
+            model.fit(x[train], np.asarray(train_y), sample_weight=weights)
+        else:
+            model = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(
+                    C=spec["C"], max_iter=2000, solver="lbfgs",
+                    class_weight=None, random_state=23,
+                ),
+            )
+            model.fit(
+                x[train], np.asarray(train_y),
+                logisticregression__sample_weight=weights,
+            )
         probabilities = model.predict_proba(x[validation])[:, list(model.classes_).index(1)]
         threshold, threshold_table, positive = _select_threshold(
             probabilities, outcomes, sides, validation, pt_atr, sl_atr,
