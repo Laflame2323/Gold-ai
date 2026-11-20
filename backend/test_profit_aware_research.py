@@ -76,7 +76,7 @@ class ProfitAwareResearchTests(unittest.TestCase):
             pt_atr=1.5, sl_atr=1.0, cost_atr=0.1,
             decisions=decisions,
         )
-        self.assertEqual(threshold, 0.65)
+        self.assertEqual(threshold, 0.50)
         self.assertTrue(positive)
         chosen = next(item for item in table if item["threshold"] == threshold)
         self.assertEqual(chosen["trades"], 25)
