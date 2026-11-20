@@ -18,7 +18,7 @@ from profit_aware_research import evaluate_profit_aware_meta
 
 def load_m1(path: Path, ask_path: Path | None = None):
     rows = []
-    with path.open(newline="", encoding="utf-8") as handle:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
         for row in csv.DictReader(handle):
             if "datetime" in row:
                 stamp = int(datetime.fromisoformat(
@@ -49,7 +49,7 @@ def load_m1(path: Path, ask_path: Path | None = None):
     }
     if ask_path:
         asks = {}
-        with ask_path.open(newline="", encoding="utf-8") as handle:
+        with ask_path.open(newline="", encoding="utf-8-sig") as handle:
             for row in csv.DictReader(handle):
                 stamp = int(float(row["timestamp"]))
                 if stamp > 100_000_000_000:
@@ -239,7 +239,7 @@ def main():
         raise SystemExit(f"H1 evaluation failed: {h1_result}")
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8-sig")
     print(json.dumps({"profit_aware_grid_selection": report["profit_aware_grid_selection"]}, indent=2))
     for configuration, result in report["profit_aware_evaluations"].items():
         summary = {
