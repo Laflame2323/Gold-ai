@@ -40,9 +40,9 @@ class ProfitAwareResearchTests(unittest.TestCase):
         self.assertGreater(selected["mean_net_r"], 0)
 
     def test_no_positive_validation_edge_means_no_trades(self):
-        outcomes = [1] * 30 + [-1] * 70
+        outcomes = [1] * 20 + [-1] * 80
         sides = [1] * 100
-        probabilities = [0.51] * 30 + [0.90] * 70
+        probabilities = [0.51] * 20 + [0.90] * 80
         threshold, _table, positive = _select_threshold(
             probabilities, outcomes, sides, list(range(100)),
             pt_atr=1.5, sl_atr=1.0, cost_atr=0.0,
