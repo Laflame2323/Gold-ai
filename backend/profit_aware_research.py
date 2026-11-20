@@ -41,7 +41,7 @@ def _trade_metrics_r(values):
     count = len(values)
     if not count:
         return {
-            "trades": 0, "coverage_pct": 0.0, "win_rate_pct": None,
+            "trades": 0, "coverage_pct": 0.0, "net_positive_rate_pct": None,
             "mean_net_r": None, "total_net_r": 0.0, "profit_factor": None,
             "max_drawdown_r": 0.0,
         }
@@ -56,7 +56,7 @@ def _trade_metrics_r(values):
         max_drawdown = max(max_drawdown, peak - equity)
     return {
         "trades": count,
-        "win_rate_pct": round(wins / count * 100, 2),
+        "net_positive_rate_pct": round(wins / count * 100, 2),
         "mean_net_r": round(float(np.mean(values)), 4),
         "total_net_r": round(float(sum(values)), 4),
         "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (
@@ -112,11 +112,15 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     validation_edge = start + int(span * 0.85)
 
     # Purge any training/validation event whose label window reaches the next block.
-    train = [i for i in range(len(decisions))
-             if sample["label_ends"][i] < train_edge]
+    embargo_bars = horizon
+    train = [i for i, decision in enumerate(decisions)
+             if sample["label_ends"][i] < train_edge
+             and decision < train_edge - embargo_bars]
     validation = [i for i, decision in enumerate(decisions)
-                  if decision >= train_edge and sample["label_ends"][i] < validation_edge]
-    test = [i for i, decision in enumerate(decisions) if decision >= validation_edge]
+                  if decision >= train_edge + embargo_bars
+                  and sample["label_ends"][i] < validation_edge]
+    test = [i for i, decision in enumerate(decisions)
+            if decision >= validation_edge + embargo_bars]
     split_samples = {"train": len(train), "validation": len(validation), "test": len(test)}
     if min(split_samples.values()) < MIN_ROWS_PER_SPLIT:
         return {
@@ -224,6 +228,17 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         "threshold_selected_on_validation_only": True,
         "model_selected_on_validation_net_expectancy": True,
         "test_used_for_selection": False,
+        "purge_overlapping_labels": True,
+        "embargo_bars": embargo_bars,
+        "embargo_applied_at_split_boundaries": True,
+        "accepted_barrier_outcomes": {
+            "target_hits": sum(outcomes[i] == sides[i] for i in accepted),
+            "stop_hits": sum(outcomes[i] == -sides[i] for i in accepted),
+            "vertical_or_ambiguous": sum(outcomes[i] == 0 for i in accepted),
+            "target_hit_rate_pct": round(
+                sum(outcomes[i] == sides[i] for i in accepted) / len(accepted) * 100, 2
+            ) if accepted else None,
+        },
         "model_persisted": False,
         "production_model_persisted": False,
         "ai_trained": False,
