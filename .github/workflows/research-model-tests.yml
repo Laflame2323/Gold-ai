@@ -26,20 +26,23 @@ jobs:
       - name: Run profit-aware meta-model tests
         working-directory: backend
         run: python -m unittest -v test_profit_aware_research
-      - name: Download audited public XAUUSD M1 sample
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Download independent Dukascopy XAUUSD M1 bid and ask history
         run: |
-          mkdir -p data/getdata
-          curl --fail --location --retry 3 --retry-all-errors \
-            https://raw.githubusercontent.com/getdata-finance/xauusd-1m-ohlcv-metals-historical-data/main/XAUUSD_1m.csv \
-            --output data/getdata/XAUUSD_1m.csv
-      - name: Evaluate chronological M30 and H1 candidates
+          mkdir -p data/dukascopy
+          npx --yes dukascopy-node -i xauusd -from 2025-01-01 -to 2026-11-19 -t m1 -p bid -f csv -v -dir data/dukascopy -fn XAUUSD_bid.csv
+          npx --yes dukascopy-node -i xauusd -from 2025-01-01 -to 2026-11-19 -t m1 -p ask -f csv -v -dir data/dukascopy -fn XAUUSD_ask.csv
+      - name: Evaluate chronological M30 and H1 candidates with observed spread
         run: |
           python backend/getdata_research_evaluation.py \
-            --input data/getdata/XAUUSD_1m.csv \
-            --output data/getdata/research_evaluation.json
-      - name: Preserve research evaluation report
+            --input data/dukascopy/XAUUSD_bid.csv \
+            --ask-input data/dukascopy/XAUUSD_ask.csv \
+            --output data/dukascopy/research_evaluation.json
+      - name: Preserve independent bid-ask research report
         uses: actions/upload-artifact@v4
         with:
-          name: gold-ai-getdata-research-evaluation
-          path: data/getdata/
+          name: gold-ai-dukascopy-bid-ask-research-evaluation
+          path: data/dukascopy/
           retention-days: 14
