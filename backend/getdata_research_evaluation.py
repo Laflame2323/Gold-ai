@@ -56,6 +56,8 @@ def load_m1(path: Path, ask_path: Path | None = None):
                     stamp //= 1000
                 asks[stamp] = {
                     "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
                     "close": float(row["close"]),
                 }
         spreads = []
@@ -68,6 +70,10 @@ def load_m1(path: Path, ask_path: Path | None = None):
             if not math.isfinite(spread) or spread <= 0:
                 continue
             row["spread"] = spread
+            row["ask_open"] = ask["open"]
+            row["ask_high"] = ask["high"]
+            row["ask_low"] = ask["low"]
+            row["ask_close"] = ask["close"]
             spreads.append(spread)
             matched += 1
         spread_audit.update({
@@ -104,6 +110,12 @@ def resample_complete(m1, interval_seconds: int):
             "volume": sum(r["volume"] for r in group),
             **({"spread": sum(r["spread"] for r in group) / len(group)}
                if all("spread" in r for r in group) else {}),
+            **({
+                "ask_open": group[0]["ask_open"],
+                "ask_high": max(r["ask_high"] for r in group),
+                "ask_low": min(r["ask_low"] for r in group),
+                "ask_close": group[-1]["ask_close"],
+            } if all("ask_open" in r for r in group) else {}),
         })
     return output, rejected
 
@@ -134,9 +146,13 @@ def main():
         if spread_audit["mean_spread_price"] is not None and mean_m30_atr
         else None
     )
-    # Include observed Dukascopy bid/ask spread plus a 0.05 ATR allowance
-    # for commissions/slippage, with a conservative 0.10 ATR floor.
-    round_trip_cost_atr = max(0.10, spread_cost_atr + 0.05) if spread_cost_atr is not None else 0.10
+    # Bid/ask prices are used directly for entries, exits and barrier touches.
+    # This remaining allowance is for commissions/slippage beyond the observed spread.
+    round_trip_cost_atr = 0.05 if ask_path else 0.10
+    estimated_total_round_trip_cost_atr = (
+        spread_cost_atr + round_trip_cost_atr
+        if spread_cost_atr is not None else round_trip_cost_atr
+    )
     source_name = "Dukascopy XAUUSD M1 bid/ask" if ask_path else "GetData public XAUUSD M1 reference sample"
 
     report = {
@@ -146,6 +162,8 @@ def main():
         "mean_m30_atr_price": mean_m30_atr,
         "observed_spread_cost_atr": spread_cost_atr,
         "round_trip_cost_atr_used": round_trip_cost_atr,
+        "estimated_total_round_trip_cost_atr": estimated_total_round_trip_cost_atr,
+        "spread_embedded_in_bid_ask_execution_prices": bool(ask_path),
         "complete_resampled_candles": {k: len(v) for k, v in candles.items()},
         "rejected_incomplete_time_buckets": rejected,
         "evaluations": {},
@@ -159,7 +177,7 @@ def main():
         "caveats": [
             "Dukascopy bid/ask is an independent reference feed, not Exness XAUUSDm execution data." if ask_path else "GetData reference OHLCV is not Exness XAUUSDm bid/ask.",
             "M1 volume is feed tick activity, not centralized traded volume.",
-            "Observed Dukascopy spread is converted to ATR units and supplemented by a 0.05 ATR allowance; this remains an estimate, not Exness fills." if ask_path else "The 0.10 ATR cost is a conservative assumption, not an observed broker fill.",
+            "Dukascopy bid/ask OHLC is used directly for entry, exit and barrier simulation; an extra 0.05 ATR is allowed for commission/slippage, not as a measured Exness fill." if ask_path else "The 0.10 ATR cost is a conservative assumption, not an observed broker fill.",
             "Actual Exness spread, commission, slippage and swap must be measured before profitability can be claimed.",
             "Results are historical research, not live or forward performance.",
             "No test-set tuning; candidate selection uses validation only.",
