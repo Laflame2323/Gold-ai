@@ -24,6 +24,10 @@ class ProfitAwareResearchTests(unittest.TestCase):
         self.assertEqual(result["mean_net_r"], 0.2)
         self.assertEqual(result["max_drawdown_r"], 1.0)
 
+    def test_empty_metrics_include_conservative_bound(self):
+        result = _trade_metrics_r([])
+        self.assertIsNone(result["mean_net_r_lower_90_bound"])
+
     def test_threshold_is_selected_on_positive_validation_expectancy(self):
         outcomes = [1] * 30 + [-1] * 70
         sides = [1] * 100
