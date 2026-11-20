@@ -888,8 +888,8 @@ def research_ml_evaluate_profit_aware_triple_barrier_mtf(
         mt5_source = get_latest_mt5_source()
         if not mt5_source:
             raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
-        timeframes = ("H4", "H1", "M30", "M15")
-        timeframe_limits = {"H4": 1000, "H1": 3000, "M30": 6000, "M15": 12000}
+        timeframes = ("H4", "H1", "M30", "M15", "M5")
+        timeframe_limits = {"H4": 1000, "H1": 3000, "M30": 6000, "M15": 12000, "M5": 36000}
         candles_by_timeframe = {}
         timeframe_data = {}
         for timeframe in timeframes:
