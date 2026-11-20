@@ -37,7 +37,7 @@ def _trade_returns_r(outcomes, sides, indices, pt_atr, sl_atr, cost_atr):
     return values
 
 
-def _trade_metrics_r(values):
+def _trade_metrics_r(values, max_range=None):
     count = len(values)
     if not count:
         return {
@@ -53,7 +53,7 @@ def _trade_metrics_r(values):
     # Empirical-Bernstein lower bound. Unlike a normal interval, it retains
     # a non-zero uncertainty penalty even when a small sample has identical returns.
     variance = float(np.var(values, ddof=1)) if count > 1 else 0.0
-    value_range = max(values) - min(values)
+    value_range = max(values) - min(values) if max_range is None else max_range
     log_term = math.log(3.0 / 0.10)  # one-sided 90% confidence
     lower_bound = (
         mean_net_r
@@ -89,7 +89,7 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr, cost
         values = _trade_returns_r(
             outcomes, sides, selected, pt_atr, sl_atr, cost_atr
         )
-        metrics = _trade_metrics_r(values)
+        metrics = _trade_metrics_r(values, max_range=pt_atr / sl_atr + 1.0)
         metrics["coverage_pct"] = round(len(selected) / len(rows) * 100, 2)
         candidates.append({"threshold": threshold, **metrics})
     eligible = [item for item in candidates
@@ -245,7 +245,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     test_returns = _trade_returns_r(
         outcomes, sides, accepted, pt_atr, sl_atr, round_trip_cost_atr
     )
-    test_metrics = _trade_metrics_r(test_returns)
+    test_metrics = _trade_metrics_r(test_returns, max_range=pt_atr / sl_atr + 1.0)
     test_metrics["coverage_pct"] = round(len(accepted) / len(test) * 100, 2)
     test_metrics["test_setups"] = len(test)
     test_metrics["classification"] = _metrics(
@@ -256,7 +256,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     cost_sensitivity = []
     for cost in (0.0, 0.025, 0.05, 0.10, 0.20):
         values = _trade_returns_r(outcomes, sides, accepted, pt_atr, sl_atr, cost)
-        item = _trade_metrics_r(values)
+        item = _trade_metrics_r(values, max_range=pt_atr / sl_atr + 1.0)
         item["round_trip_cost_atr"] = cost
         cost_sensitivity.append(item)
 
