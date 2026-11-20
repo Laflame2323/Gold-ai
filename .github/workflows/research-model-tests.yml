@@ -26,6 +26,9 @@ jobs:
       - name: Run profit-aware meta-model tests
         working-directory: backend
         run: python -m unittest -v test_profit_aware_research
+      - name: Test Dukascopy bid ask M1 loader
+        working-directory: backend
+        run: python -m unittest -v test_getdata_research_evaluation
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
