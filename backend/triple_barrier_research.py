@@ -354,27 +354,63 @@ def evaluate_triple_barrier_forward_folds(candles_by_timeframe, horizon=24,
 
     candidates = []
     validation_y = [meta_y[k] for k in validation]
-    # Keep the forward-test path responsive on the free research instance.
-    # Two compact HGB candidates are compared on validation only.
-    for leaves, rate in ((7, 0.05), (15, 0.05)):
-        candidate = HistGradientBoostingClassifier(
-            max_iter=60, learning_rate=rate, max_leaf_nodes=leaves,
-            l2_regularization=1.0, early_stopping=False, random_state=23,
+
+    # Compare three model families using validation only. The later forward
+    # folds remain untouched by model-family and hyperparameter selection.
+    from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+
+    candidate_specs = [
+        {"family": "hist_gradient_boosting", "leaves": leaves, "rate": 0.05}
+        for leaves in (7, 15)
+    ] + [
+        {"family": "extra_trees", "trees": 120, "depth": depth,
+         "min_samples_leaf": 20, "max_features": 0.8}
+        for depth in (8, 12)
+    ] + [
+        {"family": "random_forest", "trees": 120, "depth": depth,
+         "min_samples_leaf": 20, "max_features": 0.8}
+        for depth in (8, 12)
+    ]
+
+    def build_candidate(spec):
+        if spec["family"] == "hist_gradient_boosting":
+            return HistGradientBoostingClassifier(
+                max_iter=60, learning_rate=spec["rate"],
+                max_leaf_nodes=spec["leaves"], l2_regularization=1.0,
+                early_stopping=False, random_state=23,
+            )
+        if spec["family"] == "extra_trees":
+            return ExtraTreesClassifier(
+                n_estimators=spec["trees"], max_depth=spec["depth"],
+                min_samples_leaf=spec["min_samples_leaf"],
+                max_features=spec["max_features"], n_jobs=1,
+                random_state=23,
+            )
+        return RandomForestClassifier(
+            n_estimators=spec["trees"], max_depth=spec["depth"],
+            min_samples_leaf=spec["min_samples_leaf"],
+            max_features=spec["max_features"], n_jobs=1,
+            class_weight=None, random_state=23,
         )
+
+    for spec in candidate_specs:
+        candidate = build_candidate(spec)
         candidate.fit(x[train], np.asarray(train_y),
                       sample_weight=np.asarray(_weights(train_y)))
         pred = candidate.predict(x[validation]).astype(int).tolist()
-        candidates.append({"family": "hist_gradient_boosting", "leaves": leaves,
-                           "rate": rate, "metrics": _metrics(validation_y, pred)})
+        candidates.append({
+            **spec,
+            "metrics": _metrics(validation_y, pred),
+        })
+
     best = max(candidates, key=lambda c: (
-        c["metrics"]["balanced_accuracy_pct"], c["metrics"]["accuracy_pct"],
+        c["metrics"]["balanced_accuracy_pct"],
+        c["metrics"]["accuracy_pct"],
+        c["family"] == "hist_gradient_boosting",
     ))
 
     def make_model():
-        return HistGradientBoostingClassifier(
-            max_iter=60, learning_rate=best["rate"], max_leaf_nodes=best["leaves"],
-            l2_regularization=1.0, early_stopping=False, random_state=23,
-        )
+        return build_candidate(best)
 
     folds = []
     # Three consecutive, non-overlapping future blocks. The threshold is fixed
