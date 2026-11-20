@@ -864,6 +864,84 @@ def research_ml_evaluate_triple_barrier_mtf(
         raise HTTPException(status_code=503, detail=str(exc))
 
 
+@app.get("/research/ml/evaluate-profit-aware-triple-barrier-mtf")
+def research_ml_evaluate_profit_aware_triple_barrier_mtf(
+    base_timeframe: str = "M30", horizon: int = 24,
+    pt_atr: float = 1.5, sl_atr: float = 1.0,
+    round_trip_cost_atr: float = 0.0,
+):
+    """Select a meta-model and confidence threshold by validation net R; test once."""
+    from profit_aware_research import evaluate_profit_aware_meta
+
+    selected_base = base_timeframe.upper()
+    if selected_base not in {"H1", "M30"}:
+        raise HTTPException(status_code=400, detail="base_timeframe must be H1 or M30.")
+    if isinstance(horizon, bool) or not 2 <= horizon <= 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 2 and 100.")
+    if not math.isfinite(pt_atr) or not 0.1 <= pt_atr <= 10:
+        raise HTTPException(status_code=400, detail="pt_atr must be between 0.1 and 10.")
+    if not math.isfinite(sl_atr) or not 0.1 <= sl_atr <= 10:
+        raise HTTPException(status_code=400, detail="sl_atr must be between 0.1 and 10.")
+    if not math.isfinite(round_trip_cost_atr) or not 0 <= round_trip_cost_atr <= 2:
+        raise HTTPException(status_code=400, detail="round_trip_cost_atr must be between 0 and 2.")
+    try:
+        mt5_source = get_latest_mt5_source()
+        if not mt5_source:
+            raise HTTPException(status_code=503, detail="Authenticated MT5 archive is required.")
+        timeframes = ("H4", "H1", "M30", "M15")
+        timeframe_limits = {"H4": 1000, "H1": 3000, "M30": 6000, "M15": 12000}
+        candles_by_timeframe = {}
+        timeframe_data = {}
+        for timeframe in timeframes:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], timeframe,
+                max_candles=timeframe_limits[timeframe],
+            )
+            candles = market.get("candles") or []
+            if not candles:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"{timeframe} archive contains no candles.",
+                )
+            candles_by_timeframe[timeframe] = candles
+            timeframe_data[timeframe] = {
+                "count": len(candles),
+                "requested_candle_limit": timeframe_limits[timeframe],
+                "last_candle_at": market.get("last_candle_at"),
+                "age_seconds": market.get("age_seconds"),
+                "data_status": market.get("data_status"),
+            }
+        result = evaluate_profit_aware_meta(
+            candles_by_timeframe, horizon=horizon, pt_atr=pt_atr,
+            sl_atr=sl_atr, base_timeframe=selected_base,
+            round_trip_cost_atr=round_trip_cost_atr,
+        )
+        stale_timeframes = [
+            timeframe for timeframe, item in timeframe_data.items()
+            if item["data_status"] != "recent"
+        ]
+        return {
+            **result,
+            "symbol": mt5_source["symbol"],
+            "broker_source": mt5_source["source"],
+            "data_source": "Authenticated MT5 broker archive (read-only)",
+            "timeframe_data": timeframe_data,
+            "data_freshness_warning": (
+                f"Historical evaluation used stale archives: {', '.join(stale_timeframes)}. "
+                "Do not use this result for live decision-making."
+                if stale_timeframes else None
+            ),
+            "research_only": True, "read_only": True,
+            "execution_enabled": False, "accuracy_is_live": False,
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 @app.get("/research/ml/forward-test-triple-barrier-mtf")
 def research_ml_forward_test_triple_barrier_mtf(
     base_timeframe: str = "M30", horizon: int = 24,

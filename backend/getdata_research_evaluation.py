@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from triple_barrier_research import evaluate_triple_barrier_meta
+from profit_aware_research import evaluate_profit_aware_meta
 
 
 def load_m1(path: Path):
@@ -77,6 +78,8 @@ def main():
         "complete_resampled_candles": {k: len(v) for k, v in candles.items()},
         "rejected_incomplete_time_buckets": rejected,
         "evaluations": {},
+        "profit_aware_evaluations": {},
+        "profit_aware_cost_scenarios_atr": [0.0, 0.05, 0.10],
         "research_only": True,
         "read_only": True,
         "execution_enabled": False,
@@ -84,7 +87,8 @@ def main():
         "caveats": [
             "External mid-quote-style OHLCV source; not Exness XAUUSDm bid/ask.",
             "M1 volume is feed tick activity, not centralized traded volume.",
-            "No spread, commission, slippage or swap costs are modeled.",
+            "The profit-aware candidate is evaluated at explicit ATR-cost scenarios; these are sensitivity assumptions, not observed broker fills.",
+            "Actual Exness spread, commission, slippage and swap must be measured before profitability can be claimed.",
             "Results are historical research, not live or forward performance.",
             "No test-set tuning; candidate selection uses validation only.",
         ],
@@ -99,8 +103,43 @@ def main():
         if result.get("status") != "complete":
             raise SystemExit(f"{base_tf} evaluation incomplete: {result}")
 
+    # Independently test the profit-aware candidate on public historical gold data.
+    # Costs are explicit ATR-fraction scenarios because this source has no broker
+    # bid/ask or commission history. This is not a substitute for Exness MT5 data.
+    for cost_atr in (0.0, 0.05, 0.10):
+        result = evaluate_profit_aware_meta(
+            candles, horizon=24, pt_atr=1.5, sl_atr=1.0,
+            base_timeframe="M30", round_trip_cost_atr=cost_atr,
+        )
+        report["profit_aware_evaluations"][str(cost_atr)] = result
+        if result.get("status") != "complete":
+            raise SystemExit(
+                f"Profit-aware M30 evaluation at cost {cost_atr} ATR incomplete: {result}"
+            )
+
+    # Compare a slower H1 decision rule over the same approximate holding horizon.
+    h1_result = evaluate_profit_aware_meta(
+        candles, horizon=12, pt_atr=1.5, sl_atr=1.0,
+        base_timeframe="H1", round_trip_cost_atr=0.10,
+    )
+    report["profit_aware_evaluations"]["H1@0.10"] = h1_result
+    if h1_result.get("status") != "complete":
+        raise SystemExit(f"Profit-aware H1 evaluation incomplete: {h1_result}")
+
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    for cost_atr, result in report["profit_aware_evaluations"].items():
+        print(json.dumps({
+            "profit_aware_cost_atr": cost_atr,
+            "selected_confidence_threshold": result["selected_confidence_threshold"],
+            "validation_positive_net_expectancy": result["validation_positive_net_expectancy"],
+            "validation_trade_metrics": result["validation_trade_metrics"],
+            "untouched_test": result["untouched_test"],
+            "accepted_barrier_outcomes": result["accepted_barrier_outcomes"],
+            "test_cost_sensitivity": result["test_cost_sensitivity"],
+            "split_samples": result["split_samples"],
+        }, indent=2))
+
     for tf, result in report["evaluations"].items():
         print(json.dumps({
             "timeframe": tf,
