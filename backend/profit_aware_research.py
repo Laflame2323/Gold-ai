@@ -42,7 +42,7 @@ def _trade_metrics_r(values):
     if not count:
         return {
             "trades": 0, "coverage_pct": 0.0, "net_positive_rate_pct": None,
-            "mean_net_r": None, "mean_net_r_lower_90ci": None,
+            "mean_net_r": None, "mean_net_r_lower_90_bound": None,
             "total_net_r": 0.0, "profit_factor": None,
             "max_drawdown_r": 0.0,
         }
@@ -50,9 +50,16 @@ def _trade_metrics_r(values):
     gross_profit = sum(value for value in values if value > 0)
     gross_loss = -sum(value for value in values if value < 0)
     mean_net_r = float(np.mean(values))
-    standard_error = (float(np.std(values, ddof=1)) / math.sqrt(count)) if count > 1 else float("inf")
-    # Conservative one-sided 90% normal-approximation lower bound.
-    lower_bound = mean_net_r - 1.645 * standard_error
+    # Empirical-Bernstein lower bound. Unlike a normal interval, it retains
+    # a non-zero uncertainty penalty even when a small sample has identical returns.
+    variance = float(np.var(values, ddof=1)) if count > 1 else 0.0
+    value_range = max(values) - min(values)
+    log_term = math.log(3.0 / 0.10)  # one-sided 90% confidence
+    lower_bound = (
+        mean_net_r
+        - math.sqrt(2.0 * variance * log_term / count)
+        - 3.0 * value_range * log_term / count
+    )
     equity = peak = 0.0
     max_drawdown = 0.0
     for value in values:
