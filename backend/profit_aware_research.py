@@ -128,8 +128,21 @@ def _trade_metrics_r(values, max_range=None):
     }
 
 
+def _non_overlapping_rows(rows, decisions, label_ends):
+    """Keep at most one open trade at a time, in chronological order."""
+    accepted = []
+    next_available_decision = -1
+    for row in sorted(rows, key=lambda item: decisions[item]):
+        decision = decisions[row]
+        if decision >= next_available_decision:
+            accepted.append(row)
+            next_available_decision = label_ends[row]
+    return accepted
+
+
 def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
-                       cost_atr, decisions=None, gross_returns_r=None):
+                       cost_atr, decisions=None, gross_returns_r=None,
+                       label_ends=None):
     """Choose one side per validation candle; reject thin or weak candidates."""
     candidates = []
     decision_map = decisions if decisions is not None else list(range(len(outcomes)))
@@ -139,6 +152,8 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
     for threshold in (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90):
         selected = [row for probability, row in best_by_decision.values()
                     if probability >= threshold]
+        if label_ends is not None:
+            selected = _non_overlapping_rows(selected, decision_map, label_ends)
         values = _trade_returns_r(
             outcomes, sides, selected, pt_atr, sl_atr, cost_atr,
             gross_returns_r=gross_returns_r,
@@ -395,6 +410,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             probabilities, outcomes, sides, validation, pt_atr, sl_atr,
             round_trip_cost_atr, decisions=decisions,
             gross_returns_r=gross_returns_r,
+            label_ends=sample["label_ends"],
         )
         chosen = next((row for row in threshold_table if row["threshold"] == threshold), None)
         evaluated.append({
@@ -534,6 +550,9 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 row for probability, row in provisional_best_sides.values()
                 if probability >= provisional_row["threshold"]
             ]
+            provisional_accepted = _non_overlapping_rows(
+                provisional_accepted, decisions, sample["label_ends"]
+            )
             provisional_returns = _trade_returns_r(
                 outcomes, sides, provisional_accepted, pt_atr, sl_atr,
                 round_trip_cost_atr, gross_returns_r=gross_returns_r,
@@ -587,6 +606,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "ai_trained": False,
             "model_persisted": False,
             "bid_ask_execution_prices_used": sample["bid_ask_prices_used"],
+            "non_overlapping_trade_selection": True,
+            "maximum_concurrent_positions": 1,
         }
     best = max(eligible_models, key=lambda item: (
         item["validation_trade_metrics"]["mean_net_r_lower_90_bound"],
@@ -597,6 +618,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     best_test_sides = _best_side_rows(probabilities, test, decisions)
     accepted = [row for probability, row in best_test_sides.values()
                 if probability >= best["threshold"]]
+    accepted = _non_overlapping_rows(accepted, decisions, sample["label_ends"])
     test_returns = _trade_returns_r(
         outcomes, sides, accepted, pt_atr, sl_atr, round_trip_cost_atr,
         gross_returns_r=gross_returns_r,
@@ -644,6 +666,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "Without bid/ask OHLC, callers must include spread in this cost assumption."
         ),
         "bid_ask_execution_prices_used": sample["bid_ask_prices_used"],
+        "non_overlapping_trade_selection": True,
+        "maximum_concurrent_positions": 1,
         "split_samples": split_samples,
         "split_decisions": split_decisions,
         "eligible_samples": len(decisions),
