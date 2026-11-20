@@ -40,10 +40,13 @@ def load_m1(path: Path, ask_path: Path | None = None):
     if len({row["time"] for row in rows}) != len(rows):
         raise ValueError("M1 source contains duplicate timestamps.")
 
+    source_bid_minutes = len(rows)
     spread_audit = {
         "ask_file_used": bool(ask_path),
+        "source_bid_minutes": source_bid_minutes,
         "matched_bid_ask_minutes": 0,
-        "unmatched_bid_minutes": len(rows),
+        "unmatched_bid_minutes": source_bid_minutes,
+        "matched_ratio_pct": 0.0 if ask_path else None,
         "mean_spread_price": None,
         "median_spread_price": None,
     }
@@ -76,14 +79,22 @@ def load_m1(path: Path, ask_path: Path | None = None):
             row["ask_close"] = ask["close"]
             spreads.append(spread)
             matched += 1
+        unmatched = len(rows) - matched
         spread_audit.update({
             "matched_bid_ask_minutes": matched,
-            "unmatched_bid_minutes": len(rows) - matched,
+            "unmatched_bid_minutes": unmatched,
+            "matched_ratio_pct": round(matched / len(rows) * 100, 4) if rows else 0.0,
             "mean_spread_price": (sum(spreads) / len(spreads)) if spreads else None,
             "median_spread_price": (
                 sorted(spreads)[len(spreads) // 2] if spreads else None
             ),
         })
+        # Keep only fully matched executable bid/ask minutes. Resampling then
+        # rejects any M5+ bucket containing a missing minute instead of silently
+        # mixing bid-only and bid/ask execution prices.
+        rows = [row for row in rows if "ask_open" in row]
+        if not rows:
+            raise ValueError("No matched bid/ask M1 candles were available.")
     return rows, spread_audit
 
 
@@ -129,9 +140,9 @@ def main():
 
     ask_path = Path(args.ask_input) if args.ask_input else None
     m1, spread_audit = load_m1(Path(args.input), ask_path)
-    if ask_path and spread_audit["matched_bid_ask_minutes"] != len(m1):
+    if ask_path and spread_audit["matched_ratio_pct"] < 99.0:
         raise SystemExit(
-            "Bid/ask timestamp alignment is incomplete; refusing to mix executable bid/ask and bid-only candles."
+            "Bid/ask timestamp match rate is below 99%; refusing an unreliable reference sample."
         )
     intervals = {"M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
     candles = {}
