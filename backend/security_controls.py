@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 class OwnerAuthMiddleware:
     """Require a valid Supabase session belonging to the configured owner."""
 
-    PUBLIC_PATHS = {"/", "/health", "/broker/mt5/candles", "/broker/mt5/ticks"}
+    PUBLIC_PATHS = {"/", "/health", "/research/public/evaluate-profit-aware-triple-barrier-mtf", "/broker/mt5/candles", "/broker/mt5/ticks"}
 
     def __init__(self, app, owner_user_id=None, supabase_url=None, api_key=None):
         self.app = app
