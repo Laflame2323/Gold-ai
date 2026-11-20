@@ -16,7 +16,7 @@ import os
 import logging
 import time
 from mt5_ingest import MT5Batch, archive_mt5_batch, MT5TickBatch, archive_mt5_tick_batch
-from security_controls import SecurityHeadersRateLimitMiddleware
+from security_controls import OwnerAuthMiddleware, SecurityHeadersRateLimitMiddleware
 
 
 app = FastAPI(
@@ -25,8 +25,12 @@ app = FastAPI(
     version="1.3.1"
 )
 
+# Owner-only access is checked against Supabase Auth. Keep this middleware
+# inside CORS so browser clients receive CORS headers on authentication errors.
+app.add_middleware(OwnerAuthMiddleware)
+
 # Browser access is limited to the known Gold AI frontends and local development.
-# CORS is not authentication; non-browser clients must still be protected separately.
+# CORS is not authentication; the owner middleware also protects non-browser clients.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -37,7 +41,7 @@ app.add_middleware(
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-MT5-Token"],
+    allow_headers=["Content-Type", "Authorization", "apikey", "X-Client-Info", "X-MT5-Token"],
 )
 
 # Baseline response headers and per-process request throttling.
