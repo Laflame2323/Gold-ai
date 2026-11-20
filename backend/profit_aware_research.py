@@ -56,7 +56,7 @@ def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
     )
     entry_candle = candles[index + 1]
     if side > 0:
-        entry = float(entry_candle.get("ask_open", entry_candle["open"]))
+        entry = float(entry_candle["ask_open"] if has_ask else entry_candle["open"])
     else:
         entry = float(entry_candle["open"])
     target = entry + side * pt_atr * atr_value
@@ -81,7 +81,7 @@ def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
     if side > 0:
         exit_price = float(exit_candle["close"])
     else:
-        exit_price = float(exit_candle.get("ask_close", exit_candle["close"]))
+        exit_price = float(exit_candle["ask_close"] if has_ask else exit_candle["close"])
     gross_r = side * (exit_price - entry) / (atr_value * sl_atr)
     return outcome, index + horizon, gross_r, False
 
