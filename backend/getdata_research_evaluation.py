@@ -148,6 +148,8 @@ def main():
                 "message": result.get("message"),
                 "split_samples": result.get("split_samples"),
                 "candidate_models_evaluated": result.get("candidate_models_evaluated"),
+                "minimum_validation_trades": result.get("minimum_validation_trades"),
+                "candidate_validation_summary": result.get("candidate_validation_summary"),
                 "trade_selection": "no trades recommended; no candidate passed validation",
             }
         print(json.dumps(summary, indent=2))
