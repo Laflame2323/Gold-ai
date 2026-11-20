@@ -237,7 +237,8 @@ def _best_side_rows(probabilities, rows, decisions):
 
 def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                                sl_atr=1.0, base_timeframe="M30",
-                               round_trip_cost_atr=0.0):
+                               round_trip_cost_atr=0.0,
+                               include_test_diagnostic=False):
     """Train ephemeral candidates and select by validation net expectancy in R."""
     from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier
     from sklearn.linear_model import LogisticRegression
@@ -367,31 +368,109 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             20, int(math.ceil(len({decisions[i] for i in validation}) * 0.05))
         )
         candidate_summaries = []
+        provisional_candidates = []
         for candidate in evaluated:
             eligible_thresholds = [
                 row for row in candidate["threshold_table"]
                 if row["trades"] >= min_validation_trades
             ]
-            top_row = max(
+            top_lcb = max(
                 eligible_thresholds,
                 key=lambda row: row["mean_net_r_lower_90_bound"],
             ) if eligible_thresholds else None
+            top_mean = max(
+                eligible_thresholds,
+                key=lambda row: row["mean_net_r"],
+            ) if eligible_thresholds else None
             candidate_summaries.append({
                 "model_parameters": candidate["spec"],
-                "best_validation_threshold": top_row["threshold"] if top_row else None,
-                "validation_trades": top_row["trades"] if top_row else 0,
-                "validation_mean_net_r": top_row["mean_net_r"] if top_row else None,
+                "best_validation_threshold": top_lcb["threshold"] if top_lcb else None,
+                "validation_trades": top_lcb["trades"] if top_lcb else 0,
+                "validation_mean_net_r": top_lcb["mean_net_r"] if top_lcb else None,
                 "validation_lower_90_bound_net_r": (
-                    top_row["mean_net_r_lower_90_bound"] if top_row else None
+                    top_lcb["mean_net_r_lower_90_bound"] if top_lcb else None
                 ),
-                "validation_profit_factor": top_row["profit_factor"] if top_row else None,
-                "validation_coverage_pct": top_row["coverage_pct"] if top_row else 0.0,
+                "validation_profit_factor": top_lcb["profit_factor"] if top_lcb else None,
+                "validation_coverage_pct": top_lcb["coverage_pct"] if top_lcb else 0.0,
+                "best_validation_mean_threshold": top_mean["threshold"] if top_mean else None,
+                "best_validation_mean_net_r": top_mean["mean_net_r"] if top_mean else None,
+                "best_validation_mean_lower_90_bound_net_r": (
+                    top_mean["mean_net_r_lower_90_bound"] if top_mean else None
+                ),
+                "best_validation_mean_profit_factor": top_mean["profit_factor"] if top_mean else None,
+                "best_validation_mean_trades": top_mean["trades"] if top_mean else 0,
+                "best_validation_mean_coverage_pct": top_mean["coverage_pct"] if top_mean else 0.0,
             })
+            pf = top_mean["profit_factor"] if top_mean else None
+            pf_above_one = pf == "infinite" or (
+                isinstance(pf, (int, float)) and pf > 1.0
+            )
+            if top_mean and top_mean["mean_net_r"] > 0 and pf_above_one:
+                provisional_candidates.append((candidate, top_mean))
+
+        provisional_test_diagnostic = None
+        if include_test_diagnostic and provisional_candidates:
+            provisional_candidate, provisional_row = max(
+                provisional_candidates,
+                key=lambda pair: (
+                    pair[1]["mean_net_r"],
+                    pair[1]["profit_factor"] == "infinite",
+                    pair[1]["trades"],
+                ),
+            )
+            provisional_probabilities = provisional_candidate["model"].predict_proba(x[test])[
+                :, list(provisional_candidate["model"].classes_).index(1)
+            ]
+            provisional_best_sides = _best_side_rows(
+                provisional_probabilities, test, decisions
+            )
+            provisional_accepted = [
+                row for probability, row in provisional_best_sides.values()
+                if probability >= provisional_row["threshold"]
+            ]
+            provisional_returns = _trade_returns_r(
+                outcomes, sides, provisional_accepted, pt_atr, sl_atr,
+                round_trip_cost_atr,
+            )
+            provisional_test_metrics = _trade_metrics_r(
+                provisional_returns, max_range=pt_atr / sl_atr + 1.0
+            )
+            test_decision_count = len({decisions[i] for i in test})
+            provisional_test_metrics["coverage_pct"] = round(
+                len(provisional_accepted) / test_decision_count * 100, 2
+            )
+            provisional_test_metrics["test_setups"] = test_decision_count
+            provisional_test_metrics["directional_candidate_rows"] = len(test)
+            provisional_test_metrics["classification"] = _metrics(
+                test_y,
+                provisional_candidate["model"].predict(x[test]).astype(int).tolist(),
+            )
+            provisional_cost_sensitivity = []
+            for cost in (0.0, 0.025, 0.05, 0.10, 0.20):
+                values = _trade_returns_r(
+                    outcomes, sides, provisional_accepted, pt_atr, sl_atr, cost
+                )
+                metrics = _trade_metrics_r(
+                    values, max_range=pt_atr / sl_atr + 1.0
+                )
+                metrics["round_trip_cost_atr"] = cost
+                provisional_cost_sensitivity.append(metrics)
+            provisional_test_diagnostic = {
+                "model_parameters": provisional_candidate["spec"],
+                "selected_confidence_threshold": provisional_row["threshold"],
+                "validation_trade_metrics": provisional_row,
+                "untouched_test": provisional_test_metrics,
+                "test_cost_sensitivity": provisional_cost_sensitivity,
+                "test_used_for_selection": False,
+                "qualification": "diagnostic_only_validation_lower_bound_not_positive",
+            }
+
         return {
             "status": "no_positive_validation_edge",
-            "message": "No candidate passed the minimum-trade and conservative positive-expectancy checks.",
+            "message": "No candidate passed the conservative positive-expectancy lower-bound check.",
             "minimum_validation_trades": min_validation_trades,
             "candidate_validation_summary": candidate_summaries,
+            "provisional_test_diagnostic": provisional_test_diagnostic,
             "split_samples": split_samples,
             "split_decisions": split_decisions,
             "candidate_models_evaluated": len(evaluated),
