@@ -6,6 +6,7 @@ from profit_aware_research import (
     _trade_metrics_r,
     _trade_returns_r,
     _best_side_rows,
+    _non_overlapping_rows,
     _calendar_features,
     _regime_features,
     _simulate_directional_barrier,
@@ -13,6 +14,14 @@ from profit_aware_research import (
 
 
 class ProfitAwareResearchTests(unittest.TestCase):
+    def test_trade_selection_prevents_overlapping_positions(self):
+        decisions = [0, 1, 3, 4]
+        label_ends = [2, 3, 5, 6]
+        selected = _non_overlapping_rows(
+            [0, 1, 2, 3], decisions, label_ends
+        )
+        self.assertEqual(selected, [0, 2])
+
     def test_trade_returns_use_barrier_risk_and_cost(self):
         outcomes = [1, -1, 0]
         sides = [1, 1, -1]
