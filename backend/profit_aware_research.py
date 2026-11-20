@@ -394,6 +394,14 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 positive_mean_thresholds,
                 key=lambda row: row["mean_net_r"],
             ) if positive_mean_thresholds else None
+            top_validation_win_rate = max(
+                eligible_thresholds,
+                key=lambda row: (
+                    row["net_positive_rate_pct"] if row["net_positive_rate_pct"] is not None else -1,
+                    row["mean_net_r"],
+                    row["trades"],
+                ),
+            ) if eligible_thresholds else None
             candidate_summaries.append({
                 "model_parameters": candidate["spec"],
                 "best_validation_threshold": top_lcb["threshold"] if top_lcb else None,
@@ -431,17 +439,35 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 "best_positive_mean_coverage_pct": (
                     top_positive_mean["coverage_pct"] if top_positive_mean else 0.0
                 ),
+                "best_validation_win_rate_threshold": (
+                    top_validation_win_rate["threshold"] if top_validation_win_rate else None
+                ),
+                "best_validation_win_rate_pct": (
+                    top_validation_win_rate["net_positive_rate_pct"] if top_validation_win_rate else None
+                ),
+                "best_validation_win_rate_mean_net_r": (
+                    top_validation_win_rate["mean_net_r"] if top_validation_win_rate else None
+                ),
+                "best_validation_win_rate_profit_factor": (
+                    top_validation_win_rate["profit_factor"] if top_validation_win_rate else None
+                ),
+                "best_validation_win_rate_trades": (
+                    top_validation_win_rate["trades"] if top_validation_win_rate else 0
+                ),
+                "best_validation_win_rate_coverage_pct": (
+                    top_validation_win_rate["coverage_pct"] if top_validation_win_rate else 0.0
+                ),
             })
-            if top_positive_mean:
-                provisional_candidates.append((candidate, top_positive_mean))
+            if top_validation_win_rate:
+                provisional_candidates.append((candidate, top_validation_win_rate))
 
         provisional_test_diagnostic = None
         if include_test_diagnostic and provisional_candidates:
             provisional_candidate, provisional_row = max(
                 provisional_candidates,
                 key=lambda pair: (
+                    pair[1]["net_positive_rate_pct"] if pair[1]["net_positive_rate_pct"] is not None else -1,
                     pair[1]["mean_net_r"],
-                    pair[1]["profit_factor"] == "infinite",
                     pair[1]["trades"],
                 ),
             )
@@ -489,7 +515,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 "untouched_test": provisional_test_metrics,
                 "test_cost_sensitivity": provisional_cost_sensitivity,
                 "test_used_for_selection": False,
-                "qualification": "diagnostic_only_validation_lower_bound_not_positive",
+                "qualification": "diagnostic_only_selected_by_validation_win_rate_not_profitability",
             }
 
         return {
