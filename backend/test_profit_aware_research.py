@@ -74,6 +74,32 @@ class ProfitAwareResearchTests(unittest.TestCase):
         )
         self.assertEqual(result, (0, 2, 0.5, False))
 
+    def test_partial_ask_data_falls_back_to_bid_for_long_entry(self):
+        candles = [
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0},
+            {"open": 100.0, "high": 101.0, "low": 99.5, "close": 100.2,
+             "ask_open": 101.0},
+            {"open": 100.0, "high": 101.0, "low": 99.5, "close": 100.5,
+             "ask_open": 101.0, "ask_high": 101.2, "ask_low": 99.8, "ask_close": 101.0},
+        ]
+        result = _simulate_directional_barrier(
+            candles, 0, 2, 2.0, 1.0, 1.0, 1
+        )
+        self.assertEqual(result, (0, 2, 0.5, False))
+
+    def test_partial_ask_data_falls_back_to_bid_for_short_expiry(self):
+        candles = [
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0},
+            {"open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0,
+             "ask_open": 100.2, "ask_high": 100.5, "ask_low": 99.5, "ask_close": 100.2},
+            {"open": 99.5, "high": 100.0, "low": 98.5, "close": 99.0,
+             "ask_close": 98.0},
+        ]
+        result = _simulate_directional_barrier(
+            candles, 0, 2, 2.0, 1.0, 1.0, -1
+        )
+        self.assertEqual(result, (0, 2, 1.0, False))
+
     def test_realized_gross_returns_are_used_for_net_r(self):
         values = _trade_returns_r(
             [0, 0], [1, -1], [0, 1], 1.0, 1.0, 0.1,
