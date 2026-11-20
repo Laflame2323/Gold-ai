@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from getdata_research_evaluation import load_m1
+from getdata_research_evaluation import load_m1, resample_complete
 
 
 class DukascopyBidAskLoadingTests(unittest.TestCase):
@@ -34,6 +34,27 @@ class DukascopyBidAskLoadingTests(unittest.TestCase):
         self.assertEqual(audit["matched_bid_ask_minutes"], 2)
         self.assertEqual(audit["unmatched_bid_minutes"], 0)
         self.assertAlmostEqual(audit["mean_spread_price"], 0.2, places=6)
+        self.assertAlmostEqual(candles[0]["ask_open"], 2000.2, places=6)
+        self.assertAlmostEqual(candles[0]["ask_high"], 2001.2, places=6)
+        self.assertAlmostEqual(candles[0]["ask_low"], 1999.2, places=6)
+        self.assertAlmostEqual(candles[0]["ask_close"], 2000.7, places=6)
+
+    def test_resample_preserves_executable_ask_ohlc(self):
+        rows = [
+            {"time": 1700000000, "open": 2000.0, "high": 2001.0, "low": 1999.0,
+             "close": 2000.5, "volume": 1, "ask_open": 2000.2, "ask_high": 2001.2,
+             "ask_low": 1999.2, "ask_close": 2000.7},
+            {"time": 1700000060, "open": 2000.5, "high": 2002.0, "low": 2000.0,
+             "close": 2001.5, "volume": 2, "ask_open": 2000.7, "ask_high": 2002.2,
+             "ask_low": 2000.2, "ask_close": 2001.7},
+        ]
+        candles, rejected = resample_complete(rows, 120)
+        self.assertEqual(rejected, 0)
+        self.assertEqual(len(candles), 1)
+        self.assertEqual(candles[0]["ask_open"], 2000.2)
+        self.assertEqual(candles[0]["ask_high"], 2002.2)
+        self.assertEqual(candles[0]["ask_low"], 1999.2)
+        self.assertEqual(candles[0]["ask_close"], 2001.7)
 
 
 if __name__ == "__main__":
