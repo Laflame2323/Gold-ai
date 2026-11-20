@@ -37,7 +37,7 @@ app.add_middleware(
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-MT5-Token"],
+    allow_headers=["Content-Type", "Authorization", "X-MT5-Token"],
 )
 
 # Baseline response headers and per-process request throttling.
