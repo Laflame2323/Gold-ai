@@ -216,17 +216,63 @@ def main():
             for key, result in m30_grid.items()
             for row in result.get("candidate_validation_summary", [])
         ]
+        provisional_summaries = [
+            row for row in all_summaries
+            if (row.get("best_validation_mean_net_r") or -999) > 0
+            and row.get("best_validation_mean_trades", 0) >= 20
+            and (
+                row.get("best_validation_mean_profit_factor") == "infinite"
+                or (
+                    isinstance(row.get("best_validation_mean_profit_factor"), (int, float))
+                    and row["best_validation_mean_profit_factor"] > 1.0
+                )
+            )
+        ]
         best_summary = max(
-            all_summaries,
-            key=lambda row: row.get("validation_lower_90_bound_net_r", -999),
+            provisional_summaries,
+            key=lambda row: (
+                row["best_validation_mean_net_r"],
+                row["best_validation_mean_trades"],
+            ),
             default=None,
         )
-        report["profit_aware_grid_selection"] = {
-            "status": "no_qualified_configuration",
-            "message": "No M30 target-distance configuration passed conservative positive validation expectancy.",
-            "best_validation_candidate": best_summary,
-            "test_used_for_selection": False,
-        }
+        if best_summary:
+            selected_key = best_summary["configuration"]
+            selected_pt = float(selected_key.split("_PT")[1].split("_SL")[0])
+            selected_result = evaluate_profit_aware_meta(
+                candles, horizon=24, pt_atr=selected_pt, sl_atr=1.0,
+                base_timeframe="M30", round_trip_cost_atr=round_trip_cost_atr,
+                include_test_diagnostic=True,
+            )
+            m30_grid[selected_key] = selected_result
+            diagnostic = selected_result.get("provisional_test_diagnostic")
+            report["profit_aware_grid_selection"] = {
+                "status": "provisional_test_diagnostic",
+                "message": "No configuration passed the conservative validation bound; the best positive-mean validation candidate received one untouched-test diagnostic.",
+                "selected_configuration": selected_key,
+                "best_validation_candidate": best_summary,
+                "untouched_test_diagnostic": (
+                    diagnostic.get("untouched_test") if diagnostic else None
+                ),
+                "test_cost_sensitivity": (
+                    diagnostic.get("test_cost_sensitivity") if diagnostic else None
+                ),
+                "test_used_for_selection": False,
+                "production_qualified": False,
+            }
+        else:
+            best_summary = max(
+                all_summaries,
+                key=lambda row: row.get("validation_lower_90_bound_net_r", -999),
+                default=None,
+            )
+            report["profit_aware_grid_selection"] = {
+                "status": "no_qualified_configuration",
+                "message": "No M30 target-distance configuration showed positive validation mean expectancy with profit factor above one.",
+                "best_validation_candidate": best_summary,
+                "test_used_for_selection": False,
+                "production_qualified": False,
+            }
     report["profit_aware_evaluations"].update(m30_grid)
 
     # H1 is a slower comparison using a 2 ATR target and 1 ATR stop.
