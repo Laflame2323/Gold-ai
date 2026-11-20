@@ -112,9 +112,9 @@ def main():
             base_timeframe="M30", round_trip_cost_atr=cost_atr,
         )
         report["profit_aware_evaluations"][str(cost_atr)] = result
-        if result.get("status") != "complete":
+        if result.get("status") not in {"complete", "no_positive_validation_edge"}:
             raise SystemExit(
-                f"Profit-aware M30 evaluation at cost {cost_atr} ATR incomplete: {result}"
+                f"Profit-aware M30 evaluation at cost {cost_atr} ATR failed: {result}"
             )
 
     # Compare a slower H1 decision rule over the same approximate holding horizon.
@@ -123,22 +123,34 @@ def main():
         base_timeframe="H1", round_trip_cost_atr=0.10,
     )
     report["profit_aware_evaluations"]["H1@0.10"] = h1_result
-    if h1_result.get("status") != "complete":
-        raise SystemExit(f"Profit-aware H1 evaluation incomplete: {h1_result}")
+    if h1_result.get("status") not in {"complete", "no_positive_validation_edge"}:
+        raise SystemExit(f"Profit-aware H1 evaluation failed: {h1_result}")
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
     for cost_atr, result in report["profit_aware_evaluations"].items():
-        print(json.dumps({
-            "profit_aware_cost_atr": cost_atr,
-            "selected_confidence_threshold": result["selected_confidence_threshold"],
-            "validation_positive_net_expectancy": result["validation_positive_net_expectancy"],
-            "validation_trade_metrics": result["validation_trade_metrics"],
-            "untouched_test": result["untouched_test"],
-            "accepted_barrier_outcomes": result["accepted_barrier_outcomes"],
-            "test_cost_sensitivity": result["test_cost_sensitivity"],
-            "split_samples": result["split_samples"],
-        }, indent=2))
+        if result.get("status") == "complete":
+            summary = {
+                "profit_aware_cost_atr": cost_atr,
+                "status": result["status"],
+                "selected_confidence_threshold": result["selected_confidence_threshold"],
+                "validation_positive_net_expectancy": result["validation_positive_net_expectancy"],
+                "validation_trade_metrics": result["validation_trade_metrics"],
+                "untouched_test": result["untouched_test"],
+                "accepted_barrier_outcomes": result["accepted_barrier_outcomes"],
+                "test_cost_sensitivity": result["test_cost_sensitivity"],
+                "split_samples": result["split_samples"],
+            }
+        else:
+            summary = {
+                "profit_aware_cost_atr": cost_atr,
+                "status": result.get("status"),
+                "message": result.get("message"),
+                "split_samples": result.get("split_samples"),
+                "candidate_models_evaluated": result.get("candidate_models_evaluated"),
+                "trade_selection": "no trades recommended; no candidate passed validation",
+            }
+        print(json.dumps(summary, indent=2))
 
     for tf, result in report["evaluations"].items():
         print(json.dumps({
