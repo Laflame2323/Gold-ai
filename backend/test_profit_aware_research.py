@@ -8,6 +8,7 @@ from profit_aware_research import (
     _best_side_rows,
     _calendar_features,
     _regime_features,
+    _simulate_directional_barrier,
 )
 
 
@@ -20,6 +21,65 @@ class ProfitAwareResearchTests(unittest.TestCase):
             cost_atr=0.1,
         )
         self.assertEqual(values, [1.4, -1.1, -0.1])
+
+    def test_bid_ask_long_entry_and_exit_are_used(self):
+        candles = [
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0},
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+             "ask_open": 101.0, "ask_high": 102.0, "ask_low": 100.0, "ask_close": 101.0},
+            {"open": 101.0, "high": 102.2, "low": 100.5, "close": 102.0,
+             "ask_open": 102.0, "ask_high": 103.0, "ask_low": 101.5, "ask_close": 102.5},
+        ]
+        result = _simulate_directional_barrier(
+            candles, 0, 1, 1.0, 1.0, 1.0, 1
+        )
+        self.assertEqual(result, (1, 2, 1.0, False))
+
+    def test_bid_ask_short_uses_ask_side_for_exit_barriers(self):
+        candles = [
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0},
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+             "ask_open": 100.2, "ask_high": 101.0, "ask_low": 99.2, "ask_close": 100.2},
+            {"open": 99.5, "high": 100.0, "low": 98.5, "close": 99.0,
+             "ask_open": 99.7, "ask_high": 100.5, "ask_low": 98.5, "ask_close": 99.2},
+        ]
+        result = _simulate_directional_barrier(
+            candles, 0, 1, 1.0, 1.0, 1.0, -1
+        )
+        self.assertEqual(result, (-1, 2, 1.0, False))
+
+    def test_ambiguous_barrier_touch_assumes_stop_first(self):
+        candles = [
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0},
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+             "ask_open": 101.0, "ask_high": 102.0, "ask_low": 100.0, "ask_close": 101.0},
+            {"open": 101.0, "high": 102.5, "low": 99.5, "close": 101.0,
+             "ask_open": 102.0, "ask_high": 103.0, "ask_low": 100.0, "ask_close": 101.0},
+        ]
+        result = _simulate_directional_barrier(
+            candles, 0, 1, 1.0, 1.0, 1.0, 1
+        )
+        self.assertEqual(result, (-1, 2, -1.0, True))
+
+    def test_vertical_expiry_marks_to_market(self):
+        candles = [
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0},
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+             "ask_open": 101.0, "ask_high": 102.0, "ask_low": 100.0, "ask_close": 101.0},
+            {"open": 101.0, "high": 101.8, "low": 100.5, "close": 101.5,
+             "ask_open": 102.0, "ask_high": 102.2, "ask_low": 101.5, "ask_close": 102.0},
+        ]
+        result = _simulate_directional_barrier(
+            candles, 0, 1, 1.0, 1.0, 1.0, 1
+        )
+        self.assertEqual(result, (0, 1, 0.5, False))
+
+    def test_realized_gross_returns_are_used_for_net_r(self):
+        values = _trade_returns_r(
+            [0, 0], [1, -1], [0, 1], 1.0, 1.0, 0.1,
+            gross_returns_r=[0.5, -1.0],
+        )
+        self.assertEqual(values, [0.4, -1.1])
 
     def test_metrics_report_expectancy_and_drawdown(self):
         result = _trade_metrics_r([1.5, -1.0, 0.0, 1.5, -1.0])
