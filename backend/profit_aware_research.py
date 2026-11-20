@@ -11,7 +11,9 @@ import math
 import numpy as np
 
 from research_ml import MIN_ROWS_PER_SPLIT
-from triple_barrier_research import _make_samples, _metrics
+from multitimeframe_features import build_multitimeframe_features
+from causal_smc_features import FEATURE_NAMES as SMC_FEATURE_NAMES, causal_smc_features
+from triple_barrier_research import BASE_INTERVALS, _atr, _metrics
 
 
 def _weights(labels):
@@ -105,6 +107,81 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr, cost
     return best["threshold"], candidates, True
 
 
+def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, base_timeframe):
+    """Create BUY and SELL candidate labels for every completed base candle."""
+    base = candles_by_timeframe.get(base_timeframe)
+    if not isinstance(base, list) or len(base) < 1000:
+        return None, {"status": "insufficient_data", "ai_trained": False,
+                      "message": f"At least 1,000 {base_timeframe} candles are required."}
+    aligned = build_multitimeframe_features(
+        candles_by_timeframe, base_timeframe=base_timeframe,
+        timeframes=("H4", "H1", "M30", "M15"),
+    )
+    by_decision = {
+        int(c["time"]) + BASE_INTERVALS[base_timeframe]: i
+        for i, c in enumerate(base)
+    }
+    atr = _atr(base, 14)
+    rows, outcomes, sides, decisions, label_ends = [], [], [], [], []
+    counts = {"profit_target": 0, "stop_loss": 0, "vertical_or_no_touch": 0,
+              "ambiguous_same_bar": 0, "missing_atr": 0}
+    for item in aligned["rows"]:
+        i = by_decision.get(item["decision_time"])
+        if i is None or i + horizon >= len(base):
+            continue
+        if atr[i] is None or not math.isfinite(atr[i]) or atr[i] <= 0:
+            counts["missing_atr"] += 1
+            continue
+        smc = causal_smc_features(base, i, atr[i])
+        for side in (-1, 1):
+            entry = float(base[i + 1]["open"])
+            target = entry + side * pt_atr * atr[i]
+            stop = entry - side * sl_atr * atr[i]
+            outcome, end_index = 0, i + horizon
+            for j in range(i + 1, i + horizon + 1):
+                high, low = float(base[j]["high"]), float(base[j]["low"])
+                hit_target = (high >= target) if side > 0 else (low <= target)
+                hit_stop = (low <= stop) if side > 0 else (high >= stop)
+                if hit_target and hit_stop:
+                    counts["ambiguous_same_bar"] += 1
+                    outcome, end_index = 0, j
+                    break
+                if hit_target:
+                    outcome, end_index = side, j
+                    counts["profit_target"] += 1
+                    break
+                if hit_stop:
+                    outcome, end_index = -side, j
+                    counts["stop_loss"] += 1
+                    break
+            else:
+                counts["vertical_or_no_touch"] += 1
+            rows.append(item["features"] + smc + [float(side)])
+            outcomes.append(outcome)
+            sides.append(side)
+            decisions.append(i)
+            label_ends.append(end_index)
+    if not rows:
+        return None, {"status": "insufficient_data", "ai_trained": False,
+                      "message": "No eligible directional barrier events were aligned."}
+    return {
+        "x": np.asarray(rows, dtype=np.float64), "outcomes": outcomes,
+        "sides": sides, "decisions": decisions, "label_ends": label_ends,
+        "aligned": aligned, "counts": counts,
+    }, None
+
+
+def _best_side_rows(probabilities, rows, decisions):
+    """Keep only the highest-probability side for each candle decision."""
+    best = {}
+    for probability, row in zip(probabilities, rows):
+        decision = decisions[row]
+        current = best.get(decision)
+        if current is None or probability > current[0]:
+            best[decision] = (float(probability), row)
+    return best
+
+
 def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                                sl_atr=1.0, base_timeframe="M30",
                                round_trip_cost_atr=0.0):
@@ -116,7 +193,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
 
     if not math.isfinite(round_trip_cost_atr) or not 0 <= round_trip_cost_atr <= 2:
         raise ValueError("round_trip_cost_atr must be between 0 and 2.")
-    sample, error = _make_samples(
+    sample, error = _make_directional_samples(
         candles_by_timeframe, horizon, float(pt_atr), float(sl_atr), base_timeframe
     )
     if error:
