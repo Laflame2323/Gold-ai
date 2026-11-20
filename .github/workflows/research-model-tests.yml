@@ -23,6 +23,9 @@ jobs:
       - name: Run gradient boosting research tests
         working-directory: backend
         run: python -m unittest -v test_gradient_boosting_research
+      - name: Run profit-aware meta-model tests
+        working-directory: backend
+        run: python -m unittest -v test_profit_aware_research
       - name: Download audited public XAUUSD M1 sample
         run: |
           mkdir -p data/getdata
