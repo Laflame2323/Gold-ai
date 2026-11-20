@@ -42,7 +42,7 @@ def _trade_metrics_r(values):
     if not count:
         return {
             "trades": 0, "coverage_pct": 0.0, "net_positive_rate_pct": None,
-            "mean_net_r": None, "total_net_r": 0.0, "profit_factor": None,
+            "mean_net_r": None, "mean_net_r_lower_90ci": None,\n            "total_net_r": 0.0, "profit_factor": None,
             "max_drawdown_r": 0.0,
         }
     wins = sum(value > 0 for value in values)
@@ -207,11 +207,28 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             ),
         })
 
-    # Primary objective is validation net expectancy, not classification accuracy.
-    best = max(evaluated, key=lambda item: (
-        (item["validation_trade_metrics"]["mean_net_r"]
-         if item["validation_trade_metrics"]["mean_net_r"] is not None else -999),
-        item["validation_trade_metrics"]["profit_factor"] == "infinite",
+    # Select only candidates with conservative positive validation expectancy.
+    eligible_models = [
+        item for item in evaluated
+        if item["positive_validation_edge"]
+        and item["validation_trade_metrics"]["mean_net_r_lower_90ci"] is not None
+        and item["validation_trade_metrics"]["mean_net_r_lower_90ci"] > 0
+    ]
+    if not eligible_models:
+        return {
+            "status": "no_positive_validation_edge",
+            "message": "No candidate passed the minimum-trade and conservative positive-expectancy checks.",
+            "split_samples": split_samples,
+            "candidate_models_evaluated": len(evaluated),
+            "research_only": True,
+            "read_only": True,
+            "execution_enabled": False,
+            "ai_trained": False,
+            "model_persisted": False,
+        }
+    best = max(eligible_models, key=lambda item: (
+        item["validation_trade_metrics"]["mean_net_r_lower_90ci"],
+        item["validation_trade_metrics"]["mean_net_r"],
         item["validation_trade_metrics"]["trades"],
     ))
     probabilities = best["model"].predict_proba(x[test])[:, list(best["model"].classes_).index(1)]
