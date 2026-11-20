@@ -218,21 +218,14 @@ def main():
         ]
         provisional_summaries = [
             row for row in all_summaries
-            if (row.get("best_validation_mean_net_r") or -999) > 0
-            and row.get("best_validation_mean_trades", 0) >= 20
-            and (
-                row.get("best_validation_mean_profit_factor") == "infinite"
-                or (
-                    isinstance(row.get("best_validation_mean_profit_factor"), (int, float))
-                    and row["best_validation_mean_profit_factor"] > 1.0
-                )
-            )
+            if row.get("best_positive_mean_net_r") is not None
+            and row.get("best_positive_mean_trades", 0) >= 20
         ]
         best_summary = max(
             provisional_summaries,
             key=lambda row: (
-                row["best_validation_mean_net_r"],
-                row["best_validation_mean_trades"],
+                row["best_positive_mean_net_r"],
+                row["best_positive_mean_trades"],
             ),
             default=None,
         )
