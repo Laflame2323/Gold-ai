@@ -228,7 +228,6 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         "threshold_selected_on_validation_only": True,
         "model_selected_on_validation_net_expectancy": True,
         "test_used_for_selection": False,
-        "purge_overlapping_labels": True,
         "embargo_bars": embargo_bars,
         "embargo_applied_at_split_boundaries": True,
         "accepted_barrier_outcomes": {
