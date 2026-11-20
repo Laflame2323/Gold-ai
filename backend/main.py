@@ -16,6 +16,7 @@ import os
 import logging
 import time
 from mt5_ingest import MT5Batch, archive_mt5_batch, MT5TickBatch, archive_mt5_tick_batch
+from security_controls import SecurityHeadersRateLimitMiddleware
 
 
 app = FastAPI(
@@ -24,12 +25,27 @@ app = FastAPI(
     version="1.3.1"
 )
 
+# Browser access is limited to the known Gold AI frontends and local development.
+# CORS is not authentication; non-browser clients must still be protected separately.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://gold-ai-frontend-4sdiv2akn-la-flame2.vercel.app",
+        "https://gold-ai-frontend-tawny.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-MT5-Token"],
+)
+
+# Baseline response headers and per-process request throttling.
+# Add an edge/WAF or shared limiter before running multiple backend instances.
+app.add_middleware(
+    SecurityHeadersRateLimitMiddleware,
+    requests_per_minute=120,
+    writes_per_minute=30,
 )
 
 
