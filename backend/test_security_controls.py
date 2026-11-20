@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import unittest
 from unittest.mock import patch
 from security_controls import OwnerAuthMiddleware, SecurityHeadersRateLimitMiddleware
@@ -70,6 +71,28 @@ class SecurityControlsTests(unittest.IsolatedAsyncioTestCase):
         await _asgi_request(middleware, method="GET", client=("192.0.2.11", 1000))
         messages = await _asgi_request(middleware, method="POST", client=("192.0.2.11", 1000))
         self.assertEqual(messages[0]["status"], 200)
+
+    def test_owner_auth_uses_only_public_supabase_api_keys(self):
+        with patch.dict(os.environ, {
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "privileged-key",
+        }, clear=True):
+            middleware = OwnerAuthMiddleware(app=None, owner_user_id="owner")
+            self.assertEqual(middleware.api_key, "")
+
+        with patch.dict(os.environ, {
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_test",
+        }, clear=True):
+            middleware = OwnerAuthMiddleware(app=None, owner_user_id="owner")
+            self.assertEqual(middleware.api_key, "sb_publishable_test")
+
+        with patch.dict(os.environ, {
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_ANON_KEY": "legacy-anon-key",
+        }, clear=True):
+            middleware = OwnerAuthMiddleware(app=None, owner_user_id="owner")
+            self.assertEqual(middleware.api_key, "legacy-anon-key")
 
     async def test_owner_route_rejects_missing_bearer_token(self):
         middleware = OwnerAuthMiddleware(app=None, owner_user_id="owner", supabase_url="https://example.supabase.co", api_key="server-key")
