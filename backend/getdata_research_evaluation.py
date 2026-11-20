@@ -129,9 +129,9 @@ def main():
 
     ask_path = Path(args.ask_input) if args.ask_input else None
     m1, spread_audit = load_m1(Path(args.input), ask_path)
-    if ask_path and spread_audit["matched_bid_ask_minutes"] < int(len(m1) * 0.95):
+    if ask_path and spread_audit["matched_bid_ask_minutes"] != len(m1):
         raise SystemExit(
-            "Bid/ask timestamp alignment is below 95%; refusing to estimate spread from mismatched data."
+            "Bid/ask timestamp alignment is incomplete; refusing to mix executable bid/ask and bid-only candles."
         )
     intervals = {"M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
     candles = {}
