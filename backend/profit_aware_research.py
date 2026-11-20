@@ -352,16 +352,14 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 "split_samples": split_samples}
 
     weights = np.asarray(_weights(train_y), dtype=np.float64)
+    # Keep the candidate set deliberately small to reduce validation over-selection.
+    # It still covers boosted trees, bagged trees and a linear baseline.
     specs = [
-        {"family": "hist_gradient_boosting", "leaves": leaves, "rate": rate}
-        for leaves in (7, 15) for rate in (0.03, 0.07)
-    ] + [
-        {"family": "extra_trees", "trees": 160, "depth": depth,
-         "min_samples_leaf": 20, "max_features": 0.8}
-        for depth in (8, 12)
-    ] + [
-        {"family": "logistic_regression", "C": strength}
-        for strength in (0.1, 1.0, 10.0)
+        {"family": "hist_gradient_boosting", "leaves": 7, "rate": 0.03},
+        {"family": "hist_gradient_boosting", "leaves": 15, "rate": 0.07},
+        {"family": "extra_trees", "trees": 160, "depth": 8,
+         "min_samples_leaf": 20, "max_features": 0.8},
+        {"family": "logistic_regression", "C": 1.0},
     ]
 
     evaluated = []
