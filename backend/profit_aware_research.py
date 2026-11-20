@@ -84,12 +84,14 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr, cost
         metrics["coverage_pct"] = round(len(selected) / len(rows) * 100, 2)
         candidates.append({"threshold": threshold, **metrics})
     eligible = [item for item in candidates
-                if item["trades"] >= min_trades and item["mean_net_r"] is not None]
+                if item["trades"] >= min_trades
+                and item["mean_net_r_lower_90_pct"] is not None]
     best = max(eligible, key=lambda item: (
-        item["mean_net_r"], item["profit_factor"] == "infinite",
-        item["coverage_pct"],
+        item["mean_net_r_lower_90_pct"],
+        item["mean_net_r"],
+        item["trades"],
     )) if eligible else None
-    if best is None or best["mean_net_r"] <= 0:
+    if best is None or best["mean_net_r_lower_90_pct"] <= 0:
         return 1.01, candidates, False
     return best["threshold"], candidates, True
 
