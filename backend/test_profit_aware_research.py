@@ -5,6 +5,7 @@ from profit_aware_research import (
     _trade_metrics_r,
     _trade_returns_r,
     _best_side_rows,
+    _calendar_features,
 )
 
 
@@ -54,6 +55,15 @@ class ProfitAwareResearchTests(unittest.TestCase):
         )
         self.assertEqual(threshold, 1.01)
         self.assertFalse(positive)
+
+    def test_calendar_features_are_finite_and_cyclical(self):
+        first = _calendar_features(1_700_000_000)
+        same_hour_next_day = _calendar_features(1_700_086_400)
+        self.assertEqual(len(first), 4)
+        self.assertTrue(all(-1.0 <= value <= 1.0 for value in first))
+        self.assertAlmostEqual(first[0], same_hour_next_day[0], places=6)
+        self.assertAlmostEqual(first[1], same_hour_next_day[1], places=6)
+        self.assertNotAlmostEqual(first[2], same_hour_next_day[2], places=6)
 
     def test_only_highest_probability_direction_is_kept_per_candle(self):
         rows = [0, 1, 2, 3]
