@@ -207,6 +207,10 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
     if not isinstance(base, list) or len(base) < 1000:
         return None, {"status": "insufficient_data", "ai_trained": False,
                       "message": f"At least 1,000 {base_timeframe} candles are required."}
+    bid_ask_prices_used = all(
+        all(key in candle for key in ("ask_open", "ask_high", "ask_low", "ask_close"))
+        for candle in base
+    )
     feature_timeframes = (
         ("H4", "H1", "M30", "M15", "M5")
         if "M5" in candles_by_timeframe
@@ -265,6 +269,7 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
         "sides": sides, "gross_returns_r": gross_returns_r,
         "decisions": decisions, "label_ends": label_ends,
         "aligned": aligned, "counts": counts,
+        "bid_ask_prices_used": bid_ask_prices_used,
     }, None
 
 
@@ -583,6 +588,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "execution_enabled": False,
             "ai_trained": False,
             "model_persisted": False,
+            "bid_ask_execution_prices_used": sample["bid_ask_prices_used"],
         }
     best = max(eligible_models, key=lambda item: (
         item["validation_trade_metrics"]["mean_net_r_lower_90_bound"],
@@ -605,7 +611,12 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     test_metrics["classification"] = _metrics(
         test_y, best["model"].predict(x[test]).astype(int).tolist()
     )
-    test_metrics["all_directional_candidates_target_hit_rate_pct"] = round(sum(test_y) / len(test_y) * 100, 2)
+    test_metrics["all_directional_candidates_net_positive_rate_pct"] = round(
+        sum(test_y) / len(test_y) * 100, 2
+    )
+    test_metrics["all_directional_candidates_target_hit_rate_pct"] = round(
+        sum(outcomes[i] == sides[i] for i in test) / len(test) * 100, 2
+    )
 
     cost_sensitivity = []
     for cost in (0.0, 0.025, 0.05, 0.10, 0.20):
@@ -630,9 +641,11 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         "test_cost_sensitivity": cost_sensitivity,
         "round_trip_cost_atr_assumption": round_trip_cost_atr,
         "round_trip_cost_note": (
-            "Cost is supplied as a fraction of ATR. Zero means no costs; "
-            "use broker-observed spread plus commission and slippage converted to ATR."
+            "Cost is additional commission/slippage in ATR. When bid/ask OHLC is present, "
+            "spread is already embedded in executable entries, exits and barrier touches. "
+            "Without bid/ask OHLC, callers must include spread in this cost assumption."
         ),
+        "bid_ask_execution_prices_used": sample["bid_ask_prices_used"],
         "split_samples": split_samples,
         "split_decisions": split_decisions,
         "eligible_samples": len(decisions),
