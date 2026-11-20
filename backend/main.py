@@ -899,6 +899,8 @@ def research_ml_evaluate_profit_aware_triple_barrier_mtf(
             )
             candles = market.get("candles") or []
             if not candles:
+                if timeframe == "M5":
+                    continue
                 raise HTTPException(
                     status_code=503,
                     detail=f"{timeframe} archive contains no candles.",
