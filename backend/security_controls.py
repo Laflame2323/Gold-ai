@@ -50,6 +50,17 @@ class SecurityHeadersRateLimitMiddleware:
             # Bound memory under high-cardinality client traffic.
             if len(self.hits) >= self.max_clients and bucket not in self.hits:
                 self._prune(now, force=True)
+                if len(self.hits) >= self.max_clients:
+                    body = json.dumps({"detail": "Rate limiter is at capacity. Try again shortly."}).encode()
+                    headers = [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                        (b"retry-after", str(self.window_seconds).encode()),
+                        (b"cache-control", b"no-store"),
+                    ]
+                    await send({"type": "http.response.start", "status": 429, "headers": headers})
+                    await send({"type": "http.response.body", "body": body})
+                    return
             events = self.hits[bucket]
             cutoff = now - self.window_seconds
             while events and events[0] <= cutoff:
