@@ -169,7 +169,11 @@ def main():
         "evaluations": {},
         "profit_aware_evaluations": {},
         "profit_aware_cost_scenarios_atr": [round_trip_cost_atr],
-        "profit_aware_barrier_grid": [{"pt_atr": pt, "sl_atr": 1.0} for pt in (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0)],
+        "profit_aware_barrier_grid": [
+            {"pt_atr": pt, "sl_atr": sl}
+            for pt in (0.25, 0.5, 0.75, 1.0)
+            for sl in (0.5, 0.75, 1.0)
+        ],
         "research_only": True,
         "read_only": True,
         "execution_enabled": False,
@@ -193,19 +197,20 @@ def main():
         if result.get("status") != "complete":
             raise SystemExit(f"{base_tf} evaluation incomplete: {result}")
 
-    # Compare target distances using validation-only selection and a fixed 0.10 ATR cost assumption.
-    # Each candidate's chronological test block remains untouched; the grid winner is chosen only
-    # from its conservative validation expectancy lower bound.
+    # Compare compact target/stop combinations using validation-only selection.
+    # Each candidate shares the same chronological split; the untouched test is
+    # inspected only once, after selecting a configuration from validation.
     m30_grid = {}
-    for pt_atr in (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0):
-        key = f"M30_PT{pt_atr}_SL1.0_COST{round_trip_cost_atr:.4f}"
-        result = evaluate_profit_aware_meta(
-            candles, horizon=24, pt_atr=pt_atr, sl_atr=1.0,
-            base_timeframe="M30", round_trip_cost_atr=round_trip_cost_atr,
-        )
-        if result.get("status") not in {"complete", "no_positive_validation_edge"}:
-            raise SystemExit(f"{key} evaluation failed: {result}")
-        m30_grid[key] = result
+    for pt_atr in (0.25, 0.5, 0.75, 1.0):
+        for sl_atr in (0.5, 0.75, 1.0):
+            key = f"M30_PT{pt_atr}_SL{sl_atr}_COST{round_trip_cost_atr:.4f}"
+            result = evaluate_profit_aware_meta(
+                candles, horizon=24, pt_atr=pt_atr, sl_atr=sl_atr,
+                base_timeframe="M30", round_trip_cost_atr=round_trip_cost_atr,
+            )
+            if result.get("status") not in {"complete", "no_positive_validation_edge"}:
+                raise SystemExit(f"{key} evaluation failed: {result}")
+            m30_grid[key] = result
 
     qualified = [
         (key, result) for key, result in m30_grid.items()
@@ -251,8 +256,9 @@ def main():
         if best_summary:
             selected_key = best_summary["configuration"]
             selected_pt = float(selected_key.split("_PT")[1].split("_SL")[0])
+            selected_sl = float(selected_key.split("_SL")[1].split("_COST")[0])
             selected_result = evaluate_profit_aware_meta(
-                candles, horizon=24, pt_atr=selected_pt, sl_atr=1.0,
+                candles, horizon=24, pt_atr=selected_pt, sl_atr=selected_sl,
                 base_timeframe="M30", round_trip_cost_atr=round_trip_cost_atr,
                 include_test_diagnostic=True,
             )
