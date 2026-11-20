@@ -174,6 +174,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "threshold_table": threshold_table, "positive_validation_edge": positive,
             "validation_trade_metrics": chosen or {
                 "trades": 0, "mean_net_r": None, "coverage_pct": 0.0,
+                "profit_factor": None,
             },
             "validation_classification": _metrics(
                 validation_y, model.predict(x[validation]).astype(int).tolist()
@@ -182,7 +183,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
 
     # Primary objective is validation net expectancy, not classification accuracy.
     best = max(evaluated, key=lambda item: (
-        item["validation_trade_metrics"]["mean_net_r"] or -999,
+        (item["validation_trade_metrics"]["mean_net_r"]
+         if item["validation_trade_metrics"]["mean_net_r"] is not None else -999),
         item["validation_trade_metrics"]["profit_factor"] == "infinite",
         item["validation_trade_metrics"]["trades"],
     ))
