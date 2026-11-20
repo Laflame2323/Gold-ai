@@ -70,7 +70,7 @@ def _trade_metrics_r(values):
         "trades": count,
         "net_positive_rate_pct": round(wins / count * 100, 2),
         "mean_net_r": round(mean_net_r, 4),
-        "mean_net_r_lower_90ci": round(lower_bound, 4),
+        "mean_net_r_lower_90_bound": round(lower_bound, 4),
         "total_net_r": round(float(sum(values)), 4),
         "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (
             None if gross_profit == 0 else "infinite"
@@ -94,13 +94,13 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr, cost
         candidates.append({"threshold": threshold, **metrics})
     eligible = [item for item in candidates
                 if item["trades"] >= min_trades
-                and item["mean_net_r_lower_90ci"] is not None]
+                and item["mean_net_r_lower_90_bound"] is not None]
     best = max(eligible, key=lambda item: (
-        item["mean_net_r_lower_90ci"],
+        item["mean_net_r_lower_90_bound"],
         item["mean_net_r"],
         item["trades"],
     )) if eligible else None
-    if best is None or best["mean_net_r_lower_90ci"] <= 0:
+    if best is None or best["mean_net_r_lower_90_bound"] <= 0:
         return 1.01, candidates, False
     return best["threshold"], candidates, True
 
@@ -219,8 +219,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     eligible_models = [
         item for item in evaluated
         if item["positive_validation_edge"]
-        and item["validation_trade_metrics"]["mean_net_r_lower_90ci"] is not None
-        and item["validation_trade_metrics"]["mean_net_r_lower_90ci"] > 0
+        and item["validation_trade_metrics"]["mean_net_r_lower_90_bound"] is not None
+        and item["validation_trade_metrics"]["mean_net_r_lower_90_bound"] > 0
     ]
     if not eligible_models:
         return {
@@ -235,7 +235,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "model_persisted": False,
         }
     best = max(eligible_models, key=lambda item: (
-        item["validation_trade_metrics"]["mean_net_r_lower_90ci"],
+        item["validation_trade_metrics"]["mean_net_r_lower_90_bound"],
         item["validation_trade_metrics"]["mean_net_r"],
         item["validation_trade_metrics"]["trades"],
     ))
