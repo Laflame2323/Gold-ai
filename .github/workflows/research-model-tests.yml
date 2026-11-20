@@ -39,8 +39,8 @@ jobs:
       - name: Download independent Dukascopy XAUUSD M1 bid and ask history
         run: |
           mkdir -p data/dukascopy
-          npx --yes dukascopy-node -i xauusd -from 2025-01-01 -to 2026-11-19 -t m1 -p bid -f csv -v -bs 50 -bp 250 -r 3 -dir data/dukascopy -fn XAUUSD_bid.csv
-          npx --yes dukascopy-node -i xauusd -from 2025-01-01 -to 2026-11-19 -t m1 -p ask -f csv -v -bs 50 -bp 250 -r 3 -dir data/dukascopy -fn XAUUSD_ask.csv
+          npx --yes dukascopy-node -i xauusd -from 2025-01-01 -to 2026-11-19 -t m1 -p bid -f csv -v -bs 50 -bp 250 -r 3 -dir data/dukascopy -fn XAUUSD_bid
+          npx --yes dukascopy-node -i xauusd -from 2025-01-01 -to 2026-11-19 -t m1 -p ask -f csv -v -bs 50 -bp 250 -r 3 -dir data/dukascopy -fn XAUUSD_ask
       - name: Evaluate chronological M30 and H1 candidates with observed spread
         run: |
           python backend/getdata_research_evaluation.py \
