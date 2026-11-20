@@ -1,10 +1,13 @@
 import unittest
 from unittest.mock import patch
 
-from market_data import MarketDataError, _aggregate_h4, _normalise_candles, _fetch_json_with_retries, _fetch_provider_candles
+from market_data import TIMEFRAME_CONFIG, MarketDataError, _aggregate_h4, _normalise_candles, _fetch_json_with_retries, _fetch_provider_candles
 
 
 class MarketDataTests(unittest.TestCase):
+
+    def test_public_m15_history_window_supports_research_sample_size(self):
+        self.assertEqual(TIMEFRAME_CONFIG["M15"][1], "1mo")
 
     def test_history_fetch_retries_transient_failure(self):
         class FakeResponse:
