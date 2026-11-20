@@ -42,7 +42,8 @@ def _trade_metrics_r(values):
     if not count:
         return {
             "trades": 0, "coverage_pct": 0.0, "net_positive_rate_pct": None,
-            "mean_net_r": None, "mean_net_r_lower_90ci": None,\n            "total_net_r": 0.0, "profit_factor": None,
+            "mean_net_r": None, "mean_net_r_lower_90ci": None,
+            "total_net_r": 0.0, "profit_factor": None,
             "max_drawdown_r": 0.0,
         }
     wins = sum(value > 0 for value in values)
