@@ -48,6 +48,10 @@ def _trade_metrics_r(values):
     wins = sum(value > 0 for value in values)
     gross_profit = sum(value for value in values if value > 0)
     gross_loss = -sum(value for value in values if value < 0)
+    mean_net_r = float(np.mean(values))
+    standard_error = (float(np.std(values, ddof=1)) / math.sqrt(count)) if count > 1 else float("inf")
+    # Conservative one-sided 90% normal-approximation lower bound.
+    lower_bound = mean_net_r - 1.645 * standard_error
     equity = peak = 0.0
     max_drawdown = 0.0
     for value in values:
@@ -57,7 +61,7 @@ def _trade_metrics_r(values):
     return {
         "trades": count,
         "net_positive_rate_pct": round(wins / count * 100, 2),
-        "mean_net_r": round(float(np.mean(values)), 4),
+        "mean_net_r": round(mean_net_r, 4),\n        "mean_net_r_lower_90_pct": round(lower_bound, 4),
         "total_net_r": round(float(sum(values)), 4),
         "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (
             None if gross_profit == 0 else "infinite"
