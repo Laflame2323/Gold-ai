@@ -382,6 +382,18 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 eligible_thresholds,
                 key=lambda row: row["mean_net_r"],
             ) if eligible_thresholds else None
+            positive_mean_thresholds = []
+            for row in eligible_thresholds:
+                pf = row["profit_factor"]
+                pf_above_one = pf == "infinite" or (
+                    isinstance(pf, (int, float)) and pf > 1.0
+                )
+                if row["mean_net_r"] > 0 and pf_above_one:
+                    positive_mean_thresholds.append(row)
+            top_positive_mean = max(
+                positive_mean_thresholds,
+                key=lambda row: row["mean_net_r"],
+            ) if positive_mean_thresholds else None
             candidate_summaries.append({
                 "model_parameters": candidate["spec"],
                 "best_validation_threshold": top_lcb["threshold"] if top_lcb else None,
@@ -400,13 +412,28 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 "best_validation_mean_profit_factor": top_mean["profit_factor"] if top_mean else None,
                 "best_validation_mean_trades": top_mean["trades"] if top_mean else 0,
                 "best_validation_mean_coverage_pct": top_mean["coverage_pct"] if top_mean else 0.0,
+                "best_positive_mean_threshold": (
+                    top_positive_mean["threshold"] if top_positive_mean else None
+                ),
+                "best_positive_mean_net_r": (
+                    top_positive_mean["mean_net_r"] if top_positive_mean else None
+                ),
+                "best_positive_mean_profit_factor": (
+                    top_positive_mean["profit_factor"] if top_positive_mean else None
+                ),
+                "best_positive_mean_trades": (
+                    top_positive_mean["trades"] if top_positive_mean else 0
+                ),
+                "best_positive_mean_lower_90_bound_net_r": (
+                    top_positive_mean["mean_net_r_lower_90_bound"]
+                    if top_positive_mean else None
+                ),
+                "best_positive_mean_coverage_pct": (
+                    top_positive_mean["coverage_pct"] if top_positive_mean else 0.0
+                ),
             })
-            pf = top_mean["profit_factor"] if top_mean else None
-            pf_above_one = pf == "infinite" or (
-                isinstance(pf, (int, float)) and pf > 1.0
-            )
-            if top_mean and top_mean["mean_net_r"] > 0 and pf_above_one:
-                provisional_candidates.append((candidate, top_mean))
+            if top_positive_mean:
+                provisional_candidates.append((candidate, top_positive_mean))
 
         provisional_test_diagnostic = None
         if include_test_diagnostic and provisional_candidates:
