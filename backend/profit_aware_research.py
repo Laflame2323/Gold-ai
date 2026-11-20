@@ -81,18 +81,22 @@ def _trade_metrics_r(values, max_range=None):
     }
 
 
-def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr, cost_atr):
-    """Choose threshold only on validation; reject thin or non-positive samples."""
+def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
+                       cost_atr, decisions=None):
+    """Choose one side per validation candle; reject thin or weak candidates."""
     candidates = []
-    min_trades = max(20, int(math.ceil(len(rows) * 0.05)))
+    decision_map = decisions if decisions is not None else list(range(len(outcomes)))
+    unique_decisions = {decision_map[row] for row in rows}
+    min_trades = max(20, int(math.ceil(len(unique_decisions) * 0.05)))
+    best_by_decision = _best_side_rows(probabilities, rows, decision_map)
     for threshold in (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90):
-        selected = [rows[i] for i, probability in enumerate(probabilities)
+        selected = [row for probability, row in best_by_decision.values()
                     if probability >= threshold]
         values = _trade_returns_r(
             outcomes, sides, selected, pt_atr, sl_atr, cost_atr
         )
         metrics = _trade_metrics_r(values, max_range=pt_atr / sl_atr + 1.0)
-        metrics["coverage_pct"] = round(len(selected) / len(rows) * 100, 2)
+        metrics["coverage_pct"] = round(len(selected) / len(unique_decisions) * 100, 2)
         candidates.append({"threshold": threshold, **metrics})
     eligible = [item for item in candidates
                 if item["trades"] >= min_trades
@@ -206,14 +210,19 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     train_edge = start + int(span * 0.70)
     validation_edge = start + int(span * 0.85)
 
-    # Purge any training/validation event whose label window reaches the next block.
+    # Keep BUY and SELL rows from the same candle in the same split.
     embargo_bars = horizon
+    decision_label_end = {}
+    for decision, label_end in zip(decisions, sample["label_ends"]):
+        decision_label_end[decision] = max(
+            decision_label_end.get(decision, 0), label_end
+        )
     train = [i for i, decision in enumerate(decisions)
-             if sample["label_ends"][i] < train_edge
+             if decision_label_end[decision] < train_edge
              and decision < train_edge - embargo_bars]
     validation = [i for i, decision in enumerate(decisions)
                   if decision >= train_edge + embargo_bars
-                  and sample["label_ends"][i] < validation_edge]
+                  and decision_label_end[decision] < validation_edge]
     test = [i for i, decision in enumerate(decisions)
             if decision >= validation_edge + embargo_bars]
     split_samples = {"train": len(train), "validation": len(validation), "test": len(test)}
@@ -277,7 +286,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         probabilities = model.predict_proba(x[validation])[:, list(model.classes_).index(1)]
         threshold, threshold_table, positive = _select_threshold(
             probabilities, outcomes, sides, validation, pt_atr, sl_atr,
-            round_trip_cost_atr,
+            round_trip_cost_atr, decisions=decisions,
         )
         chosen = next((row for row in threshold_table if row["threshold"] == threshold), None)
         evaluated.append({
@@ -317,18 +326,21 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         item["validation_trade_metrics"]["trades"],
     ))
     probabilities = best["model"].predict_proba(x[test])[:, list(best["model"].classes_).index(1)]
-    accepted = [test[i] for i, probability in enumerate(probabilities)
+    best_test_sides = _best_side_rows(probabilities, test, decisions)
+    accepted = [row for probability, row in best_test_sides.values()
                 if probability >= best["threshold"]]
     test_returns = _trade_returns_r(
         outcomes, sides, accepted, pt_atr, sl_atr, round_trip_cost_atr
     )
     test_metrics = _trade_metrics_r(test_returns, max_range=pt_atr / sl_atr + 1.0)
-    test_metrics["coverage_pct"] = round(len(accepted) / len(test) * 100, 2)
-    test_metrics["test_setups"] = len(test)
+    test_decision_count = len({decisions[i] for i in test})
+    test_metrics["coverage_pct"] = round(len(accepted) / test_decision_count * 100, 2)
+    test_metrics["test_setups"] = test_decision_count
+    test_metrics["directional_candidate_rows"] = len(test)
     test_metrics["classification"] = _metrics(
         test_y, best["model"].predict(x[test]).astype(int).tolist()
     )
-    test_metrics["all_setup_win_rate_pct"] = round(sum(test_y) / len(test_y) * 100, 2)
+    test_metrics["all_directional_candidates_target_hit_rate_pct"] = round(sum(test_y) / len(test_y) * 100, 2)
 
     cost_sensitivity = []
     for cost in (0.0, 0.025, 0.05, 0.10, 0.20):
@@ -357,6 +369,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         "purge_overlapping_labels": True,
         "threshold_selected_on_validation_only": True,
         "model_selected_on_validation_net_expectancy": True,
+        "directional_side_selection_enabled": True,
+        "one_trade_max_per_base_candle": True,
         "test_used_for_selection": False,
         "embargo_bars": embargo_bars,
         "embargo_applied_at_split_boundaries": True,
@@ -377,7 +391,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         "execution_enabled": False,
         "accuracy_is_live": False,
         "limitations": [
-            "The base trade side remains the completed-timeframe EMA10 trend rule.",
+            "Both BUY and SELL candidates are scored per completed base-timeframe candle; the higher-probability side is selected.",
             "OHLC bars cannot resolve intrabar order when both barriers are touched; these events are conservatively neutral.",
             "Zero cost is not a profitability claim; supply broker-observed spread, commission and slippage in ATR units.",
             "Net R is a historical barrier outcome estimate, not a fill-level MT5 execution simulation.",
