@@ -4,6 +4,7 @@ from profit_aware_research import (
     _select_threshold,
     _trade_metrics_r,
     _trade_returns_r,
+    _best_side_rows,
 )
 
 
@@ -53,6 +54,33 @@ class ProfitAwareResearchTests(unittest.TestCase):
         )
         self.assertEqual(threshold, 1.01)
         self.assertFalse(positive)
+
+    def test_only_highest_probability_direction_is_kept_per_candle(self):
+        rows = [0, 1, 2, 3]
+        decisions = [10, 10, 11, 11]
+        selected = _best_side_rows([0.70, 0.85, 0.90, 0.60], rows, decisions)
+        self.assertEqual(set(selected), {10, 11})
+        self.assertEqual(selected[10][1], 1)
+        self.assertEqual(selected[11][1], 2)
+
+    def test_directional_threshold_counts_one_trade_per_candle(self):
+        outcomes, sides, probabilities, decisions = [], [], [], []
+        for decision in range(25):
+            outcomes.extend([1 if decision < 15 else -1, -1 if decision < 15 else 1])
+            sides.extend([1, -1])
+            probabilities.extend([0.85, 0.60])
+            decisions.extend([decision, decision])
+        rows = list(range(50))
+        threshold, table, positive = _select_threshold(
+            probabilities, outcomes, sides, rows,
+            pt_atr=1.5, sl_atr=1.0, cost_atr=0.1,
+            decisions=decisions,
+        )
+        self.assertEqual(threshold, 0.65)
+        self.assertTrue(positive)
+        chosen = next(item for item in table if item["threshold"] == threshold)
+        self.assertEqual(chosen["trades"], 25)
+        self.assertEqual(chosen["coverage_pct"], 100.0)
 
     def test_no_positive_validation_edge_means_no_trades(self):
         outcomes = [1] * 20 + [-1] * 80
