@@ -314,9 +314,35 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         and item["validation_trade_metrics"]["mean_net_r_lower_90_bound"] > 0
     ]
     if not eligible_models:
+        min_validation_trades = max(
+            20, int(math.ceil(len({decisions[i] for i in validation}) * 0.05))
+        )
+        candidate_summaries = []
+        for candidate in evaluated:
+            eligible_thresholds = [
+                row for row in candidate["threshold_table"]
+                if row["trades"] >= min_validation_trades
+            ]
+            top_row = max(
+                eligible_thresholds,
+                key=lambda row: row["mean_net_r_lower_90_bound"],
+            ) if eligible_thresholds else None
+            candidate_summaries.append({
+                "model_parameters": candidate["spec"],
+                "best_validation_threshold": top_row["threshold"] if top_row else None,
+                "validation_trades": top_row["trades"] if top_row else 0,
+                "validation_mean_net_r": top_row["mean_net_r"] if top_row else None,
+                "validation_lower_90_bound_net_r": (
+                    top_row["mean_net_r_lower_90_bound"] if top_row else None
+                ),
+                "validation_profit_factor": top_row["profit_factor"] if top_row else None,
+                "validation_coverage_pct": top_row["coverage_pct"] if top_row else 0.0,
+            })
         return {
             "status": "no_positive_validation_edge",
             "message": "No candidate passed the minimum-trade and conservative positive-expectancy checks.",
+            "minimum_validation_trades": min_validation_trades,
+            "candidate_validation_summary": candidate_summaries,
             "split_samples": split_samples,
             "split_decisions": split_decisions,
             "candidate_models_evaluated": len(evaluated),
