@@ -15,23 +15,69 @@ from triple_barrier_research import evaluate_triple_barrier_meta
 from profit_aware_research import evaluate_profit_aware_meta
 
 
-def load_m1(path: Path):
+def load_m1(path: Path, ask_path: Path | None = None):
     rows = []
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            stamp = datetime.fromisoformat(row["datetime"].replace("Z", "+00:00"))
+            if "datetime" in row:
+                stamp = int(datetime.fromisoformat(
+                    row["datetime"].replace("Z", "+00:00")
+                ).timestamp())
+            else:
+                stamp = int(float(row["timestamp"]))
+                if stamp > 100_000_000_000:
+                    stamp //= 1000
             rows.append({
-                "time": int(stamp.timestamp()),
+                "time": stamp,
                 "open": float(row["open"]),
                 "high": float(row["high"]),
                 "low": float(row["low"]),
                 "close": float(row["close"]),
-                "volume": float(row["volume"]),
+                "volume": float(row.get("volume") or 0.0),
             })
     rows.sort(key=lambda item: item["time"])
     if len({row["time"] for row in rows}) != len(rows):
         raise ValueError("M1 source contains duplicate timestamps.")
-    return rows
+
+    spread_audit = {
+        "ask_file_used": bool(ask_path),
+        "matched_bid_ask_minutes": 0,
+        "unmatched_bid_minutes": len(rows),
+        "mean_spread_price": None,
+        "median_spread_price": None,
+    }
+    if ask_path:
+        asks = {}
+        with ask_path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                stamp = int(float(row["timestamp"]))
+                if stamp > 100_000_000_000:
+                    stamp //= 1000
+                asks[stamp] = {
+                    "open": float(row["open"]),
+                    "close": float(row["close"]),
+                }
+        spreads = []
+        matched = 0
+        for row in rows:
+            ask = asks.get(row["time"])
+            if ask is None:
+                continue
+            spread = ((ask["open"] - row["open"]) + (ask["close"] - row["close"])) / 2.0
+            if not math.isfinite(spread) or spread <= 0:
+                continue
+            row["spread"] = spread
+            spreads.append(spread)
+            matched += 1
+        spread_audit.update({
+            "matched_bid_ask_minutes": matched,
+            "unmatched_bid_minutes": len(rows) - matched,
+            "mean_spread_price": (sum(spreads) / len(spreads)) if spreads else None,
+            "median_spread_price": (
+                sorted(spreads)[len(spreads) // 2] if spreads else None
+            ),
+        })
+    return rows, spread_audit
 
 
 def resample_complete(m1, interval_seconds: int):
@@ -55,6 +101,8 @@ def resample_complete(m1, interval_seconds: int):
             "low": min(r["low"] for r in group),
             "close": group[-1]["close"],
             "volume": sum(r["volume"] for r in group),
+            **({"spread": sum(r["spread"] for r in group) / len(group)}
+               if all("spread" in r for r in group) else {}),
         })
     return output, rejected
 
