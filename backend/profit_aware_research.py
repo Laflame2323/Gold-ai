@@ -10,8 +10,15 @@ from __future__ import annotations
 import math
 import numpy as np
 
-from research_ml import MIN_ROWS_PER_SPLIT, _weights
+from research_ml import MIN_ROWS_PER_SPLIT
 from triple_barrier_research import _make_samples, _metrics
+
+
+def _weights(labels):
+    counts = {label: labels.count(label) for label in set(labels)}
+    if len(counts) < 2:
+        raise ValueError("Training labels must contain at least two classes.")
+    return [len(labels) / (len(counts) * counts[label]) for label in labels]
 
 
 def _trade_returns_r(outcomes, sides, indices, pt_atr, sl_atr, cost_atr):
