@@ -22,10 +22,12 @@ class OwnerAuthMiddleware:
         self.app = app
         self.owner_user_id = owner_user_id or os.getenv("GOLD_AI_OWNER_USER_ID", "")
         self.supabase_url = (supabase_url or os.getenv("SUPABASE_URL", "")).rstrip("/")
+        # Auth user lookup only needs a public project API key. Never fall
+        # back to a secret/service-role key for end-user session validation.
         self.api_key = (
             api_key
-            or os.getenv("SUPABASE_SECRET_KEY")
-            or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+            or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+            or os.getenv("SUPABASE_ANON_KEY")
             or ""
         )
 
