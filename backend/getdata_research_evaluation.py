@@ -8,10 +8,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 
-from triple_barrier_research import evaluate_triple_barrier_meta
+from triple_barrier_research import _atr, evaluate_triple_barrier_meta
 from profit_aware_research import evaluate_profit_aware_meta
 
 
@@ -109,34 +110,52 @@ def resample_complete(m1, interval_seconds: int):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True)
+    parser.add_argument("--input", required=True, help="Bid or reference M1 CSV")
+    parser.add_argument("--ask-input", help="Optional ask-side M1 CSV for observed spread estimation")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    m1 = load_m1(Path(args.input))
+    ask_path = Path(args.ask_input) if args.ask_input else None
+    m1, spread_audit = load_m1(Path(args.input), ask_path)
     intervals = {"M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
     candles = {}
     rejected = {}
     for name, seconds in intervals.items():
         candles[name], rejected[name] = resample_complete(m1, seconds)
 
+    m30_atr = [value for value in _atr(candles["M30"], 14) if value is not None]
+    mean_m30_atr = sum(m30_atr) / len(m30_atr) if m30_atr else None
+    spread_cost_atr = (
+        spread_audit["mean_spread_price"] / mean_m30_atr
+        if spread_audit["mean_spread_price"] is not None and mean_m30_atr
+        else None
+    )
+    # Include observed Dukascopy bid/ask spread plus a 0.05 ATR allowance
+    # for commissions/slippage, with a conservative 0.10 ATR floor.
+    round_trip_cost_atr = max(0.10, spread_cost_atr + 0.05) if spread_cost_atr is not None else 0.10
+    source_name = "Dukascopy XAUUSD M1 bid/ask" if ask_path else "GetData public XAUUSD M1 reference sample"
+
     report = {
-        "source": "GetData public XAUUSD M1 sample",
+        "source": source_name,
         "source_rows_m1": len(m1),
+        "spread_audit": spread_audit,
+        "mean_m30_atr_price": mean_m30_atr,
+        "observed_spread_cost_atr": spread_cost_atr,
+        "round_trip_cost_atr_used": round_trip_cost_atr,
         "complete_resampled_candles": {k: len(v) for k, v in candles.items()},
         "rejected_incomplete_time_buckets": rejected,
         "evaluations": {},
         "profit_aware_evaluations": {},
-        "profit_aware_cost_scenarios_atr": [0.10],
+        "profit_aware_cost_scenarios_atr": [round_trip_cost_atr],
         "profit_aware_barrier_grid": [{"pt_atr": pt, "sl_atr": 1.0} for pt in (1.5, 2.0, 2.5, 3.0)],
         "research_only": True,
         "read_only": True,
         "execution_enabled": False,
         "production_model_persisted": False,
         "caveats": [
-            "External mid-quote-style OHLCV source; not Exness XAUUSDm bid/ask.",
+            "Dukascopy bid/ask is an independent reference feed, not Exness XAUUSDm execution data." if ask_path else "GetData reference OHLCV is not Exness XAUUSDm bid/ask.",
             "M1 volume is feed tick activity, not centralized traded volume.",
-            "The profit-aware candidate is evaluated at explicit ATR-cost scenarios; these are sensitivity assumptions, not observed broker fills.",
+            "Observed Dukascopy spread is converted to ATR units and supplemented by a 0.05 ATR allowance; this remains an estimate, not Exness fills." if ask_path else "The 0.10 ATR cost is a conservative assumption, not an observed broker fill.",
             "Actual Exness spread, commission, slippage and swap must be measured before profitability can be claimed.",
             "Results are historical research, not live or forward performance.",
             "No test-set tuning; candidate selection uses validation only.",
@@ -157,10 +176,10 @@ def main():
     # from its conservative validation expectancy lower bound.
     m30_grid = {}
     for pt_atr in (1.5, 2.0, 2.5, 3.0):
-        key = f"M30_PT{pt_atr}_SL1.0_COST0.10"
+        key = f"M30_PT{pt_atr}_SL1.0_COST{round_trip_cost_atr:.4f}"
         result = evaluate_profit_aware_meta(
             candles, horizon=24, pt_atr=pt_atr, sl_atr=1.0,
-            base_timeframe="M30", round_trip_cost_atr=0.10,
+            base_timeframe="M30", round_trip_cost_atr=round_trip_cost_atr,
         )
         if result.get("status") not in {"complete", "no_positive_validation_edge"}:
             raise SystemExit(f"{key} evaluation failed: {result}")
@@ -209,9 +228,9 @@ def main():
     # H1 is a slower comparison using a 2 ATR target and 1 ATR stop.
     h1_result = evaluate_profit_aware_meta(
         candles, horizon=12, pt_atr=2.0, sl_atr=1.0,
-        base_timeframe="H1", round_trip_cost_atr=0.10,
+        base_timeframe="H1", round_trip_cost_atr=round_trip_cost_atr,
     )
-    report["profit_aware_evaluations"]["H1_PT2.0_SL1.0_COST0.10"] = h1_result
+    report["profit_aware_evaluations"][f"H1_PT2.0_SL1.0_COST{round_trip_cost_atr:.4f}"] = h1_result
     if h1_result.get("status") not in {"complete", "no_positive_validation_edge"}:
         raise SystemExit(f"H1 evaluation failed: {h1_result}")
 
