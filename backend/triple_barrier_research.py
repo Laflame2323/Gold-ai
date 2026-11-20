@@ -91,21 +91,25 @@ def _make_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, base_timeframe)
             continue
         side = 1 if trend_gap > 0 else -1
         entry = float(base[i + 1]["open"])
-        upper, lower = entry + pt_atr * atr[i], entry - sl_atr * atr[i]
+        # Define barriers relative to the trade direction so BUY and SELL
+        # setups receive identical target and stop distances in ATR units.
+        target = entry + side * pt_atr * atr[i]
+        stop = entry - side * sl_atr * atr[i]
         outcome, end_index = 0, i + horizon
         for j in range(i + 1, i + horizon + 1):
-            hit_up = float(base[j]["high"]) >= upper
-            hit_down = float(base[j]["low"]) <= lower
-            if hit_up and hit_down:
+            high, low = float(base[j]["high"]), float(base[j]["low"])
+            hit_target = (high >= target) if side > 0 else (low <= target)
+            hit_stop = (low <= stop) if side > 0 else (high >= stop)
+            if hit_target and hit_stop:
                 counts["ambiguous_same_bar"] += 1
                 outcome, end_index = 0, j
                 break
-            if hit_up:
-                outcome, end_index = 1, j
+            if hit_target:
+                outcome, end_index = side, j
                 counts["profit_target"] += 1
                 break
-            if hit_down:
-                outcome, end_index = -1, j
+            if hit_stop:
+                outcome, end_index = -side, j
                 counts["stop_loss"] += 1
                 break
         else:
