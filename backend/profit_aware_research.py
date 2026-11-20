@@ -259,6 +259,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
                 sum(outcomes[i] == sides[i] for i in accepted) / len(accepted) * 100, 2
             ) if accepted else None,
         },
+        "candidate_model_trained": True,
         "model_persisted": False,
         "production_model_persisted": False,
         "ai_trained": False,
