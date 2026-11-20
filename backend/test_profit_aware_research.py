@@ -6,6 +6,7 @@ from profit_aware_research import (
     _trade_returns_r,
     _best_side_rows,
     _calendar_features,
+    _regime_features,
 )
 
 
@@ -55,6 +56,23 @@ class ProfitAwareResearchTests(unittest.TestCase):
         )
         self.assertEqual(threshold, 1.01)
         self.assertFalse(positive)
+
+    def test_regime_features_use_valid_completed_candles(self):
+        candles = []
+        for i in range(60):
+            close = 2000.0 + i * 0.2
+            candles.append({
+                "time": i * 1800, "open": close - 0.1,
+                "high": close + 0.4, "low": close - 0.4,
+                "close": close, "volume": 100 + i,
+            })
+        atr_values = [0.8] * 60
+        result = _regime_features(candles, 40, atr_values)
+        self.assertEqual(len(result), 5)
+        self.assertTrue(all(math.isfinite(value) for value in result))
+        self.assertGreater(result[0], 0)
+        self.assertGreaterEqual(result[3], 0)
+        self.assertLessEqual(result[3], 1)
 
     def test_calendar_features_are_finite_and_cyclical(self):
         first = _calendar_features(1_700_000_000)
