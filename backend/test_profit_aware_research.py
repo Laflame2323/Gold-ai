@@ -39,6 +39,17 @@ class ProfitAwareResearchTests(unittest.TestCase):
         self.assertEqual(selected["trades"], 30)
         self.assertGreater(selected["mean_net_r"], 0)
 
+    def test_uncertain_positive_mean_is_rejected_by_lower_bound(self):
+        outcomes = [1] * 12 + [-1] * 8
+        sides = [1] * 20
+        probabilities = [0.80] * 20
+        threshold, _table, positive = _select_threshold(
+            probabilities, outcomes, sides, list(range(20)),
+            pt_atr=1.5, sl_atr=1.0, cost_atr=0.1,
+        )
+        self.assertEqual(threshold, 1.01)
+        self.assertFalse(positive)
+
     def test_no_positive_validation_edge_means_no_trades(self):
         outcomes = [1] * 20 + [-1] * 80
         sides = [1] * 100
