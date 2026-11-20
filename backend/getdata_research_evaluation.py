@@ -121,7 +121,7 @@ def main():
         raise SystemExit(
             "Bid/ask timestamp alignment is below 95%; refusing to estimate spread from mismatched data."
         )
-    intervals = {"M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
+    intervals = {"M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
     candles = {}
     rejected = {}
     for name, seconds in intervals.items():
