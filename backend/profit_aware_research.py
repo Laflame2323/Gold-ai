@@ -61,7 +61,8 @@ def _trade_metrics_r(values):
     return {
         "trades": count,
         "net_positive_rate_pct": round(wins / count * 100, 2),
-        "mean_net_r": round(mean_net_r, 4),\n        "mean_net_r_lower_90_pct": round(lower_bound, 4),
+        "mean_net_r": round(mean_net_r, 4),
+        "mean_net_r_lower_90ci": round(lower_bound, 4),
         "total_net_r": round(float(sum(values)), 4),
         "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else (
             None if gross_profit == 0 else "infinite"
@@ -85,13 +86,13 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr, cost
         candidates.append({"threshold": threshold, **metrics})
     eligible = [item for item in candidates
                 if item["trades"] >= min_trades
-                and item["mean_net_r_lower_90_pct"] is not None]
+                and item["mean_net_r_lower_90ci"] is not None]
     best = max(eligible, key=lambda item: (
-        item["mean_net_r_lower_90_pct"],
+        item["mean_net_r_lower_90ci"],
         item["mean_net_r"],
         item["trades"],
     )) if eligible else None
-    if best is None or best["mean_net_r_lower_90_pct"] <= 0:
+    if best is None or best["mean_net_r_lower_90ci"] <= 0:
         return 1.01, candidates, False
     return best["threshold"], candidates, True
 
