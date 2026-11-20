@@ -111,6 +111,19 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
     return best["threshold"], candidates, True
 
 
+def _calendar_features(timestamp):
+    """Cyclical UTC hour and weekday features; uses decision time only."""
+    day_number = int(timestamp) // 86400
+    hour = (int(timestamp) % 86400) / 3600.0
+    weekday = (day_number + 3) % 7  # 1970-01-01 was Thursday
+    hour_angle = 2.0 * math.pi * hour / 24.0
+    weekday_angle = 2.0 * math.pi * weekday / 7.0
+    return [
+        math.sin(hour_angle), math.cos(hour_angle),
+        math.sin(weekday_angle), math.cos(weekday_angle),
+    ]
+
+
 def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, base_timeframe):
     """Create BUY and SELL candidate labels for every completed base candle."""
     base = candles_by_timeframe.get(base_timeframe)
@@ -137,6 +150,7 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
             counts["missing_atr"] += 1
             continue
         smc = causal_smc_features(base, i, atr[i])
+        calendar = _calendar_features(item["decision_time"])
         for side in (-1, 1):
             entry = float(base[i + 1]["open"])
             target = entry + side * pt_atr * atr[i]
@@ -160,7 +174,7 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
                     break
             else:
                 counts["vertical_or_no_touch"] += 1
-            rows.append(item["features"] + smc + [float(side)])
+            rows.append(item["features"] + smc + calendar + [float(side)])
             outcomes.append(outcome)
             sides.append(side)
             decisions.append(i)
@@ -402,6 +416,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
         "eligible_samples": len(decisions),
         "eligible_decisions": len(set(decisions)),
         "directional_candidates_per_decision": 2,
+        "calendar_features_timezone": "UTC",
         "purge_overlapping_labels": True,
         "threshold_selected_on_validation_only": True,
         "model_selected_on_validation_net_expectancy": True,
