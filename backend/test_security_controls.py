@@ -117,6 +117,22 @@ class SecurityControlsTests(unittest.IsolatedAsyncioTestCase):
             messages = await _asgi_request(middleware, headers=[(b"authorization", b"Bearer valid-session")])
         self.assertEqual(messages[0]["status"], 403)
 
+    async def test_public_profit_aware_research_route_bypasses_owner_login(self):
+        middleware = OwnerAuthMiddleware(app=None)
+        messages = await _asgi_request(
+            middleware,
+            path="/research/public/evaluate-profit-aware-triple-barrier-mtf",
+        )
+        self.assertEqual(messages[0]["status"], 200)
+
+    async def test_private_research_route_still_requires_owner_login(self):
+        middleware = OwnerAuthMiddleware(app=None)
+        messages = await _asgi_request(
+            middleware,
+            path="/research/ml/evaluate-profit-aware-triple-barrier-mtf",
+        )
+        self.assertEqual(messages[0]["status"], 401)
+
     async def test_health_and_mt5_ingest_bypass_owner_login(self):
         middleware = OwnerAuthMiddleware(app=None)
         for path in ("/health", "/broker/mt5/candles", "/broker/mt5/ticks"):
