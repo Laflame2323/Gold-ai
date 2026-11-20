@@ -1063,3 +1063,74 @@ def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: f
         raise HTTPException(status_code=422, detail=str(exc))
     except MarketStorageError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/research/public/evaluate-profit-aware-triple-barrier-mtf")
+def research_public_profit_aware_triple_barrier_mtf(
+    base_timeframe: str = "M30", horizon: int = 24,
+    pt_atr: float = 1.5, sl_atr: float = 1.0,
+    round_trip_cost_atr: float = 0.10,
+):
+    """Public-data-only read-only evaluation; never reads private MT5 archives."""
+    from profit_aware_research import evaluate_profit_aware_meta
+
+    selected_base = base_timeframe.upper()
+    if selected_base not in {"H1", "M30"}:
+        raise HTTPException(status_code=400, detail="base_timeframe must be H1 or M30.")
+    if isinstance(horizon, bool) or not 2 <= horizon <= 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 2 and 100.")
+    if not math.isfinite(pt_atr) or not 0.1 <= pt_atr <= 10:
+        raise HTTPException(status_code=400, detail="pt_atr must be between 0.1 and 10.")
+    if not math.isfinite(sl_atr) or not 0.1 <= sl_atr <= 10:
+        raise HTTPException(status_code=400, detail="sl_atr must be between 0.1 and 10.")
+    if not math.isfinite(round_trip_cost_atr) or not 0 <= round_trip_cost_atr <= 2:
+        raise HTTPException(status_code=400, detail="round_trip_cost_atr must be between 0 and 2.")
+
+    try:
+        timeframes = ("H4", "H1", "M30", "M15")
+        candles_by_timeframe = {}
+        timeframe_data = {}
+        for timeframe in timeframes:
+            market = get_market_candles(timeframe)
+            candles = market.get("candles") or []
+            if not candles:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Public {timeframe} reference history contains no candles.",
+                )
+            candles_by_timeframe[timeframe] = candles
+            timeframe_data[timeframe] = {
+                "count": len(candles),
+                "last_candle_at": market.get("last_candle_at"),
+                "age_seconds": market.get("age_seconds"),
+                "data_status": market.get("data_status"),
+            }
+
+        result = evaluate_profit_aware_meta(
+            candles_by_timeframe, horizon=horizon, pt_atr=pt_atr,
+            sl_atr=sl_atr, base_timeframe=selected_base,
+            round_trip_cost_atr=round_trip_cost_atr,
+        )
+        stale_timeframes = [
+            timeframe for timeframe, item in timeframe_data.items()
+            if item["data_status"] != "recent"
+        ]
+        return {
+            **result,
+            "symbol": "XAUUSD",
+            "data_source": "Public XAUS reference-market candles (not broker execution prices)",
+            "timeframe_data": timeframe_data,
+            "data_freshness_warning": (
+                f"Reference candles are stale for: {', '.join(stale_timeframes)}."
+                if stale_timeframes else None
+            ),
+            "research_only": True, "read_only": True,
+            "execution_enabled": False, "accuracy_is_live": False,
+            "private_mt5_data_used": False,
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
