@@ -6,7 +6,8 @@
 - API responses receive defensive headers: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and HSTS.
 - Research and broker API responses are marked `Cache-Control: no-store`.
 - A per-process request limiter is enabled (120 reads/minute and 30 writes/minute per ASGI client address).
-- MT5 candle and tick ingestion continue to require the private `X-MT5-Token` and constant-time token comparison.
+- Owner-only API middleware verifies each Supabase access token through the Supabase Auth `/auth/v1/user` endpoint and allows only the configured owner UUID. Missing auth configuration fails closed.
+- MT5 candle and tick ingestion remain separately protected by the private `X-MT5-Token` and constant-time token comparison.
 - Supabase credentials remain backend-only. No service-role/secret key belongs in frontend code, browser storage, Git, or logs.
 
 ## Verified database posture (2026-11-20)
@@ -17,6 +18,13 @@
 - The current backend uses its private server-side Supabase key for database access. Keep that key private.
 
 Do not add broad public RLS policies just to silence the advisor. If browser access is introduced, use Supabase Auth and explicit least-privilege policies scoped to the authenticated user's rows. Re-check grants, views, functions, and Storage separately.
+
+## Owner-only authentication notes
+
+- Protected requests are verified against Supabase Auth on every request. This validates the session with Supabase and avoids trusting unverified JWT contents.
+- The owner UUID is configured through Render environment variables, not hard-coded into Git.
+- The frontend login/session flow is not included in this backend-only change. Do not enable the lock on the live service until the frontend can sign in and send its Supabase access token.
+- The backend must have `SUPABASE_URL` and either `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` configured server-side. Never expose that key to the browser.
 
 ## Important limitations
 
@@ -29,8 +37,8 @@ Do not add broad public RLS policies just to silence the advisor. If browser acc
 ## Required next phases
 
 1. Choose single-owner private access or multi-user access.
-2. Add Supabase Auth with short-lived sessions, MFA where available, server-side JWT verification, and explicit owner/admin roles.
-3. Protect private research, model-management, and assistant endpoints. Keep only health/status endpoints public where needed.
+2. Build the frontend login/session flow and configure Render variables `GOLD_AI_OWNER_USER_ID`, `SUPABASE_URL`, and the existing private Supabase API key.
+3. Deploy and verify unauthenticated requests receive 401, non-owner sessions receive 403, and the owner session can access private routes. Keep only `/` and `/health` public; MT5 ingestion remains token-protected.
 4. Create append-only audit events for sign-ins, failed access, data exports, model changes, training runs, and configuration changes. Never log secrets or full credentials.
 5. Verify RLS and SQL grants for every exposed table, view, function, and Storage bucket. Use owner-scoped policies; do not rely on `TO authenticated` alone.
 6. Add shared edge rate limits, request-size limits, bot protection, and alerts.
