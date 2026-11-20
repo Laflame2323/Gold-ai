@@ -111,6 +111,35 @@ def _select_threshold(probabilities, outcomes, sides, rows, pt_atr, sl_atr,
     return best["threshold"], candidates, True
 
 
+def _regime_features(candles, index, atr_values):
+    """Causal base-timeframe volatility, momentum and range-regime features."""
+    current_atr = float(atr_values[index])
+    current_close = float(candles[index]["close"])
+    start = max(0, index - 49)
+    recent_atr = [float(value) for value in atr_values[start:index + 1]
+                  if value is not None and math.isfinite(value) and value > 0]
+    atr_mean = sum(recent_atr) / len(recent_atr) if recent_atr else current_atr
+    recent = candles[max(0, index - 19):index + 1]
+    prior_high = max(float(item["high"]) for item in recent)
+    prior_low = min(float(item["low"]) for item in recent)
+    range_width = max(prior_high - prior_low, 1e-12)
+    close_position = (current_close - prior_low) / range_width
+    lookback_close = float(candles[max(0, index - 5)]["close"])
+    momentum_5_atr = (current_close - lookback_close) / current_atr
+    mean_bar_range = sum(
+        float(item["high"]) - float(item["low"])
+        for item in recent[-10:]
+    ) / min(10, len(recent))
+    current_range = float(candles[index]["high"]) - float(candles[index]["low"])
+    return [
+        current_atr / max(atr_mean, 1e-12),
+        momentum_5_atr,
+        range_width / current_atr,
+        min(max(close_position, 0.0), 1.0),
+        current_range / max(mean_bar_range, 1e-12),
+    ]
+
+
 def _calendar_features(timestamp):
     """Cyclical UTC hour and weekday features; uses decision time only."""
     day_number = int(timestamp) // 86400
@@ -150,6 +179,7 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
             counts["missing_atr"] += 1
             continue
         smc = causal_smc_features(base, i, atr[i])
+        regime = _regime_features(base, i, atr)
         calendar = _calendar_features(item["decision_time"])
         for side in (-1, 1):
             entry = float(base[i + 1]["open"])
@@ -174,7 +204,7 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
                     break
             else:
                 counts["vertical_or_no_touch"] += 1
-            rows.append(item["features"] + smc + calendar + [float(side)])
+            rows.append(item["features"] + smc + regime + calendar + [float(side)])
             outcomes.append(outcome)
             sides.append(side)
             decisions.append(i)
