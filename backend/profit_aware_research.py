@@ -52,7 +52,7 @@ def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
     """
     has_ask = all(
         all(key in candles[j] for key in ("ask_open", "ask_high", "ask_low", "ask_close"))
-        for j in range(index, index + horizon + 1)
+        for j in range(index + 1, index + horizon + 1)
     )
     entry_candle = candles[index + 1]
     if side > 0:
