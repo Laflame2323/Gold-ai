@@ -51,9 +51,8 @@ def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
     marked to the executable close rather than treated as a zero-return trade.
     """
     has_ask = all(
-        key in candles[index + offset]
-        for offset in (0, 1)
-        for key in ("ask_open", "ask_high", "ask_low", "ask_close")
+        all(key in candles[j] for key in ("ask_open", "ask_high", "ask_low", "ask_close"))
+        for j in range(index, index + horizon + 1)
     )
     entry_candle = candles[index + 1]
     if side > 0:
@@ -72,11 +71,11 @@ def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
         hit_target = (high >= target) if side > 0 else (low <= target)
         hit_stop = (low <= stop) if side > 0 else (high >= stop)
         if hit_target and hit_stop:
-            return -side, j, -1.0
+            return -side, j, -1.0, True
         if hit_target:
-            return side, j, pt_atr / sl_atr
+            return side, j, pt_atr / sl_atr, False
         if hit_stop:
-            return -side, j, -1.0
+            return -side, j, -1.0, False
 
     exit_candle = candles[index + horizon]
     if side > 0:
@@ -84,7 +83,7 @@ def _simulate_directional_barrier(candles, index, horizon, pt_atr, sl_atr,
     else:
         exit_price = float(exit_candle.get("ask_close", exit_candle["close"]))
     gross_r = side * (exit_price - entry) / (atr_value * sl_atr)
-    return outcome, index + horizon, gross_r
+    return outcome, index + horizon, gross_r, False
 
 
 def _trade_metrics_r(values, max_range=None):
@@ -239,10 +238,12 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
             float(base[i].get("spread", 0.0) or 0.0) / float(atr[i])
         )
         for side in (-1, 1):
-            outcome, end_index, gross_r = _simulate_directional_barrier(
+            outcome, end_index, gross_r, ambiguous = _simulate_directional_barrier(
                 base, i, horizon, pt_atr, sl_atr, float(atr[i]), side
             )
-            if outcome == side:
+            if ambiguous:
+                counts["ambiguous_same_bar"] += 1
+            elif outcome == side:
                 counts["profit_target"] += 1
             elif outcome == -side:
                 counts["stop_loss"] += 1
@@ -532,7 +533,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             ]
             provisional_returns = _trade_returns_r(
                 outcomes, sides, provisional_accepted, pt_atr, sl_atr,
-                round_trip_cost_atr,
+                round_trip_cost_atr, gross_returns_r=gross_returns_r,
             )
             provisional_test_metrics = _trade_metrics_r(
                 provisional_returns, max_range=pt_atr / sl_atr + 1.0
@@ -550,7 +551,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             provisional_cost_sensitivity = []
             for cost in (0.0, 0.025, 0.05, 0.10, 0.20):
                 values = _trade_returns_r(
-                    outcomes, sides, provisional_accepted, pt_atr, sl_atr, cost
+                    outcomes, sides, provisional_accepted, pt_atr, sl_atr, cost,
+                    gross_returns_r=gross_returns_r,
                 )
                 metrics = _trade_metrics_r(
                     values, max_range=pt_atr / sl_atr + 1.0
@@ -592,7 +594,8 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     accepted = [row for probability, row in best_test_sides.values()
                 if probability >= best["threshold"]]
     test_returns = _trade_returns_r(
-        outcomes, sides, accepted, pt_atr, sl_atr, round_trip_cost_atr
+        outcomes, sides, accepted, pt_atr, sl_atr, round_trip_cost_atr,
+        gross_returns_r=gross_returns_r,
     )
     test_metrics = _trade_metrics_r(test_returns, max_range=pt_atr / sl_atr + 1.0)
     test_decision_count = len({decisions[i] for i in test})
@@ -606,7 +609,10 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
 
     cost_sensitivity = []
     for cost in (0.0, 0.025, 0.05, 0.10, 0.20):
-        values = _trade_returns_r(outcomes, sides, accepted, pt_atr, sl_atr, cost)
+        values = _trade_returns_r(
+            outcomes, sides, accepted, pt_atr, sl_atr, cost,
+            gross_returns_r=gross_returns_r,
+        )
         item = _trade_metrics_r(values, max_range=pt_atr / sl_atr + 1.0)
         item["round_trip_cost_atr"] = cost
         cost_sensitivity.append(item)
