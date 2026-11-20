@@ -66,7 +66,7 @@ class ProfitAwareResearchTests(unittest.TestCase):
     def test_directional_threshold_counts_one_trade_per_candle(self):
         outcomes, sides, probabilities, decisions = [], [], [], []
         for decision in range(25):
-            outcomes.extend([1 if decision < 15 else -1, -1 if decision < 15 else 1])
+            outcomes.extend([1, -1])
             sides.extend([1, -1])
             probabilities.extend([0.85, 0.60])
             decisions.extend([decision, decision])
