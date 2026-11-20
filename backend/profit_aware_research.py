@@ -226,10 +226,15 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
     test = [i for i, decision in enumerate(decisions)
             if decision >= validation_edge + embargo_bars]
     split_samples = {"train": len(train), "validation": len(validation), "test": len(test)}
+    split_decisions = {
+        name: len({decisions[i] for i in indices})
+        for name, indices in (("train", train), ("validation", validation), ("test", test))
+    }
     if min(split_samples.values()) < MIN_ROWS_PER_SPLIT:
         return {
             "status": "insufficient_data", "ai_trained": False,
-            "eligible_samples": len(decisions), "split_samples": split_samples,
+            "eligible_samples": len(decisions), "eligible_decisions": len(set(decisions)),
+            "split_samples": split_samples, "split_decisions": split_decisions,
             "minimum_samples_per_split": MIN_ROWS_PER_SPLIT,
         }
 
@@ -313,6 +318,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "status": "no_positive_validation_edge",
             "message": "No candidate passed the minimum-trade and conservative positive-expectancy checks.",
             "split_samples": split_samples,
+            "split_decisions": split_decisions,
             "candidate_models_evaluated": len(evaluated),
             "research_only": True,
             "read_only": True,
@@ -351,7 +357,7 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
 
     return {
         "status": "complete",
-        "model_type": "profit_aware_triple_barrier_meta_model",
+        "model_type": "directional_profit_aware_triple_barrier_meta_model",
         "selected_parameters": best["spec"],
         "selected_confidence_threshold": best["threshold"],
         "validation_positive_net_expectancy": best["positive_validation_edge"],
