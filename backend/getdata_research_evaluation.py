@@ -117,6 +117,15 @@ def main():
                 f"Profit-aware M30 evaluation at cost {cost_atr} ATR incomplete: {result}"
             )
 
+    # Compare a slower H1 decision rule over the same approximate holding horizon.
+    h1_result = evaluate_profit_aware_meta(
+        candles, horizon=12, pt_atr=1.5, sl_atr=1.0,
+        base_timeframe="H1", round_trip_cost_atr=0.10,
+    )
+    report["profit_aware_evaluations"]["H1@0.10"] = h1_result
+    if h1_result.get("status") != "complete":
+        raise SystemExit(f"Profit-aware H1 evaluation incomplete: {h1_result}")
+
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
     for cost_atr, result in report["profit_aware_evaluations"].items():
