@@ -8,6 +8,10 @@ on:
     branches:
       - research/multitimeframe-feature-builder
 
+concurrency:
+  group: gold-ai-research-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-gradient-boosting:
     runs-on: ubuntu-latest
