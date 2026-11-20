@@ -27,13 +27,13 @@ class ProfitAwareResearchTests(unittest.TestCase):
     def test_threshold_is_selected_on_positive_validation_expectancy(self):
         outcomes = [1] * 30 + [-1] * 70
         sides = [1] * 100
-        probabilities = [0.90] * 30 + [0.40] * 70
+        probabilities = [0.90] * 30 + [0.60] * 70
         rows = list(range(100))
         threshold, table, positive = _select_threshold(
             probabilities, outcomes, sides, rows,
             pt_atr=1.5, sl_atr=1.0, cost_atr=0.1,
         )
-        self.assertEqual(threshold, 0.9)
+        self.assertEqual(threshold, 0.65)
         self.assertTrue(positive)
         selected = next(item for item in table if item["threshold"] == threshold)
         self.assertEqual(selected["trades"], 30)
