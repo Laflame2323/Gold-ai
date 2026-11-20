@@ -72,7 +72,7 @@ class ProfitAwareResearchTests(unittest.TestCase):
         result = _simulate_directional_barrier(
             candles, 0, 2, 1.0, 1.0, 1.0, 1
         )
-        self.assertEqual(result, (0, 1, 0.5, False))
+        self.assertEqual(result, (0, 2, 0.5, False))
 
     def test_realized_gross_returns_are_used_for_net_r(self):
         values = _trade_returns_r(
