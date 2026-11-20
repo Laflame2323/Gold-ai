@@ -159,9 +159,14 @@ def _make_directional_samples(candles_by_timeframe, horizon, pt_atr, sl_atr, bas
     if not isinstance(base, list) or len(base) < 1000:
         return None, {"status": "insufficient_data", "ai_trained": False,
                       "message": f"At least 1,000 {base_timeframe} candles are required."}
+    feature_timeframes = (
+        ("H4", "H1", "M30", "M15", "M5")
+        if "M5" in candles_by_timeframe
+        else ("H4", "H1", "M30", "M15")
+    )
     aligned = build_multitimeframe_features(
         candles_by_timeframe, base_timeframe=base_timeframe,
-        timeframes=("H4", "H1", "M30", "M15"),
+        timeframes=feature_timeframes,
     )
     by_decision = {
         int(c["time"]) + BASE_INTERVALS[base_timeframe]: i
