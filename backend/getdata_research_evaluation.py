@@ -151,7 +151,7 @@ def main():
         "evaluations": {},
         "profit_aware_evaluations": {},
         "profit_aware_cost_scenarios_atr": [round_trip_cost_atr],
-        "profit_aware_barrier_grid": [{"pt_atr": pt, "sl_atr": 1.0} for pt in (1.5, 2.0, 2.5, 3.0)],
+        "profit_aware_barrier_grid": [{"pt_atr": pt, "sl_atr": 1.0} for pt in (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0)],
         "research_only": True,
         "read_only": True,
         "execution_enabled": False,
@@ -179,7 +179,7 @@ def main():
     # Each candidate's chronological test block remains untouched; the grid winner is chosen only
     # from its conservative validation expectancy lower bound.
     m30_grid = {}
-    for pt_atr in (1.5, 2.0, 2.5, 3.0):
+    for pt_atr in (0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0):
         key = f"M30_PT{pt_atr}_SL1.0_COST{round_trip_cost_atr:.4f}"
         result = evaluate_profit_aware_meta(
             candles, horizon=24, pt_atr=pt_atr, sl_atr=1.0,
@@ -218,14 +218,15 @@ def main():
         ]
         provisional_summaries = [
             row for row in all_summaries
-            if row.get("best_positive_mean_net_r") is not None
-            and row.get("best_positive_mean_trades", 0) >= 20
+            if row.get("best_validation_win_rate_pct") is not None
+            and row.get("best_validation_win_rate_trades", 0) >= 20
         ]
         best_summary = max(
             provisional_summaries,
             key=lambda row: (
-                row["best_positive_mean_net_r"],
-                row["best_positive_mean_trades"],
+                row["best_validation_win_rate_pct"],
+                row.get("best_validation_win_rate_mean_net_r") or -999,
+                row["best_validation_win_rate_trades"],
             ),
             default=None,
         )
@@ -241,9 +242,10 @@ def main():
             diagnostic = selected_result.get("provisional_test_diagnostic")
             report["profit_aware_grid_selection"] = {
                 "status": "provisional_test_diagnostic",
-                "message": "No configuration passed the conservative validation bound; the best positive-mean validation candidate received one untouched-test diagnostic.",
+                "message": "No configuration passed the conservative validation bound; the highest validation accepted-trade win-rate candidate received one untouched-test diagnostic.",
                 "selected_configuration": selected_key,
                 "best_validation_candidate": best_summary,
+                "selection_objective": "validation accepted-trade net-positive rate; profitability checked separately",
                 "untouched_test_diagnostic": (
                     diagnostic.get("untouched_test") if diagnostic else None
                 ),
