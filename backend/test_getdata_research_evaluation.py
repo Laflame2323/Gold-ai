@@ -41,10 +41,10 @@ class DukascopyBidAskLoadingTests(unittest.TestCase):
 
     def test_resample_preserves_executable_ask_ohlc(self):
         rows = [
-            {"time": 1700000000, "open": 2000.0, "high": 2001.0, "low": 1999.0,
+            {"time": 1699999920, "open": 2000.0, "high": 2001.0, "low": 1999.0,
              "close": 2000.5, "volume": 1, "ask_open": 2000.2, "ask_high": 2001.2,
              "ask_low": 1999.2, "ask_close": 2000.7},
-            {"time": 1700000060, "open": 2000.5, "high": 2002.0, "low": 2000.0,
+            {"time": 1699999980, "open": 2000.5, "high": 2002.0, "low": 2000.0,
              "close": 2001.5, "volume": 2, "ask_open": 2000.7, "ask_high": 2002.2,
              "ask_low": 2000.2, "ask_close": 2001.7},
         ]
