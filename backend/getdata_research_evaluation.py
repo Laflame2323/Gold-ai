@@ -37,13 +37,27 @@ def load_m1(path: Path, ask_path: Path | None = None):
                 "volume": float(row.get("volume") or 0.0),
             })
     rows.sort(key=lambda item: item["time"])
-    if len({row["time"] for row in rows}) != len(rows):
-        raise ValueError("M1 source contains duplicate timestamps.")
+    # Weekly tick archives can repeat an identical boundary minute. Keep one
+    # copy only when every OHLCV field is identical; never silently choose
+    # between conflicting candles.
+    unique_rows = {}
+    duplicate_bid_rows_removed = 0
+    for row in rows:
+        previous = unique_rows.get(row["time"])
+        if previous is None:
+            unique_rows[row["time"]] = row
+        elif previous != row:
+            stamp = datetime.fromtimestamp(row["time"]).isoformat()
+            raise ValueError(f"Conflicting duplicate M1 BID candle at {stamp}.")
+        else:
+            duplicate_bid_rows_removed += 1
+    rows = list(unique_rows.values())
 
     source_bid_minutes = len(rows)
     spread_audit = {
         "ask_file_used": bool(ask_path),
         "source_bid_minutes": source_bid_minutes,
+        "duplicate_identical_bid_rows_removed": duplicate_bid_rows_removed,
         "matched_bid_ask_minutes": 0,
         "unmatched_bid_minutes": source_bid_minutes,
         "matched_ratio_pct": 0.0 if ask_path else None,
@@ -52,17 +66,27 @@ def load_m1(path: Path, ask_path: Path | None = None):
     }
     if ask_path:
         asks = {}
+        duplicate_ask_rows_removed = 0
         with ask_path.open(newline="", encoding="utf-8-sig") as handle:
             for row in csv.DictReader(handle):
                 stamp = int(float(row["timestamp"]))
                 if stamp > 100_000_000_000:
                     stamp //= 1000
-                asks[stamp] = {
+                candle = {
                     "open": float(row["open"]),
                     "high": float(row["high"]),
                     "low": float(row["low"]),
                     "close": float(row["close"]),
                 }
+                previous = asks.get(stamp)
+                if previous is not None and previous != candle:
+                    raise ValueError(
+                        f"Conflicting duplicate M1 ASK candle at {datetime.fromtimestamp(stamp).isoformat()}."
+                    )
+                if previous is not None:
+                    duplicate_ask_rows_removed += 1
+                asks[stamp] = candle
+        spread_audit["duplicate_identical_ask_rows_removed"] = duplicate_ask_rows_removed
         spreads = []
         matched = 0
         for row in rows:
