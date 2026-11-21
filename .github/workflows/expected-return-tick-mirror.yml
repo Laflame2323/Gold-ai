@@ -175,12 +175,15 @@ jobs:
         if: always()
         run: rm -rf data/tick_source
 
-      - name: Preserve audit and research results only
+      - name: Preserve candle audit and research diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gold-ai-expected-return-tick-mirror-research
           path: |
             data/dukascopy/combined/data_audit.json
+            data/dukascopy/combined/xauusd_m1_bid.csv
+            data/dukascopy/combined/xauusd_m1_ask.csv
             data/dukascopy/combined/expected_return_evaluation.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
