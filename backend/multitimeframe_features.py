@@ -1,4 +1,4 @@
-"Leakage-safe multi-timeframe feature alignment for Gold AI research.
+"""Leakage-safe multi-timeframe feature alignment for Gold AI research.
 
 Candle timestamps are candle OPEN times. A feature may use a candle only when
 its close time is at or before the base decision candle's close time.
