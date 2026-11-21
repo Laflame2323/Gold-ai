@@ -40,7 +40,7 @@ def decode_candle_file(payload: bytes, day: date) -> dict[int, dict]:
     return result
 
 
-def fetch_side(day: date, side: str, timeout: int = 30, attempts: int = 4):
+def fetch_side(day: date, side: str, timeout: int = 45, attempts: int = 8):
     if side not in {"BID", "ASK"}:
         raise ValueError("Price side must be BID or ASK.")
     url = (f"{BASE_URL}/XAUUSD/{day.year}/{day.month - 1:02d}/"
@@ -61,7 +61,7 @@ def fetch_side(day: date, side: str, timeout: int = 30, attempts: int = 4):
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
             if attempt == attempts - 1:
                 raise
-        time.sleep(min(2 ** attempt, 15))
+        time.sleep(min(2 ** attempt, 60))
     raise RuntimeError("Dukascopy download exhausted retries.")
 
 
