@@ -97,6 +97,20 @@ def get_latest_mt5_source():
     return {"symbol": symbol, "source": source, "fetched_at": row.get("fetched_at")}
 
 
+
+def mt5_timeframes_are_fresh(market_data, required_timeframes):
+    """True only when every required broker timeframe has fresh, non-empty candles."""
+    if not isinstance(market_data, dict) or not required_timeframes:
+        return False
+    for timeframe in required_timeframes:
+        result = market_data.get(timeframe)
+        if not isinstance(result, dict):
+            return False
+        if result.get("data_status") != "recent" or not result.get("candles"):
+            return False
+    return True
+
+
 def get_mt5_market_candles(symbol, source, timeframe, now=None):
     """Read one broker-specific timeframe; never mix brokers or reference feeds."""
     if timeframe not in MT5_TIMEFRAME_SECONDS:
