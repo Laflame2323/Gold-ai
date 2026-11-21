@@ -120,6 +120,16 @@ def _simulate(rows, start, end, horizon, stop_atr, target_r, spread_cost, slippa
         exit_reason = "time"
         for j in range(entry_index, min(end, entry_index + horizon)):
             candle = rows[j]
+            # Model gaps at the next available open rather than granting a fill
+            # at a stop/target price that the market has already crossed.
+            stop_gap = candle["open"] <= stop if side == 1 else candle["open"] >= stop
+            target_gap = candle["open"] >= target if side == 1 else candle["open"] <= target
+            if stop_gap:
+                exit_price, exit_index, exit_reason = candle["open"], j, "stop_gap"
+                break
+            if target_gap:
+                exit_price, exit_index, exit_reason = candle["open"], j, "target_gap"
+                break
             stop_hit = candle["low"] <= stop if side == 1 else candle["high"] >= stop
             target_hit = candle["high"] >= target if side == 1 else candle["low"] <= target
             if stop_hit:  # Conservative ordering when both are touched in one candle.
