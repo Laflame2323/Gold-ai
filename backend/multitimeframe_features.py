@@ -1,4 +1,4 @@
-"""Leakage-safe multi-timeframe feature alignment for Gold AI research.
+"Leakage-safe multi-timeframe feature alignment for Gold AI research.
 
 Candle timestamps are candle OPEN times. A feature may use a candle only when
 its close time is at or before the base decision candle's close time.
@@ -71,23 +71,32 @@ def _rsi(values, period=14):
 def _feature_names(timeframes):
     names = []
     for timeframe in timeframes:
+        prefix = timeframe.lower()
         names.extend([
-            f"{timeframe.lower()}_return_1",
-            f"{timeframe.lower()}_return_3",
-            f"{timeframe.lower()}_return_5",
-            f"{timeframe.lower()}_ema_gap_10",
-            f"{timeframe.lower()}_ema_gap_30",
-            f"{timeframe.lower()}_rsi_14",
-            f"{timeframe.lower()}_range_pct",
-            f"{timeframe.lower()}_body_pct",
-            f"{timeframe.lower()}_volatility_10",
+            f"{prefix}_return_1",
+            f"{prefix}_return_3",
+            f"{prefix}_return_5",
+            f"{prefix}_ema_gap_10",
+            f"{prefix}_ema_gap_30",
+            f"{prefix}_rsi_14",
+            f"{prefix}_range_pct",
+            f"{prefix}_body_pct",
+            f"{prefix}_volatility_10",
+            f"{prefix}_ema10_slope_3_atr",
+            f"{prefix}_ema30_slope_5_atr",
+            f"{prefix}_distance_prior_high_20_atr",
+            f"{prefix}_distance_prior_low_20_atr",
+            f"{prefix}_close_location",
+            f"{prefix}_upper_wick_ratio",
+            f"{prefix}_lower_wick_ratio",
+            f"{prefix}_range_to_atr",
         ])
     return names
 
 
 def _features(candles, index):
     window = candles[max(0, index - 199):index + 1]
-    if len(window) < 31:
+    if len(window) < 35:
         return None
     closes = [item["close"] for item in window]
     current = closes[-1]
@@ -96,7 +105,29 @@ def _features(candles, index):
     row = window[-1]
     ema10 = _ema(closes, 10)
     ema30 = _ema(closes, 30)
-    return [
+    ema10_previous = _ema(closes[:-3], 10)
+    ema30_previous = _ema(closes[:-5], 30)
+
+    true_ranges = []
+    for j in range(1, len(window)):
+        candle = window[j]
+        previous_close = closes[j - 1]
+        true_ranges.append(max(
+            candle["high"] - candle["low"],
+            abs(candle["high"] - previous_close),
+            abs(candle["low"] - previous_close),
+        ))
+    atr = sum(true_ranges[-14:]) / min(14, len(true_ranges))
+    atr = max(atr, 1e-12)
+
+    prior = window[-21:-1]
+    prior_high = max(item["high"] for item in prior)
+    prior_low = min(item["low"] for item in prior)
+    candle_range = max(row["high"] - row["low"], 1e-12)
+    upper_wick = row["high"] - max(row["open"], row["close"])
+    lower_wick = min(row["open"], row["close"]) - row["low"]
+
+    values = [
         current / closes[-2] - 1.0,
         current / closes[-4] - 1.0,
         current / closes[-6] - 1.0,
@@ -106,7 +137,18 @@ def _features(candles, index):
         (row["high"] - row["low"]) / current,
         (row["close"] - row["open"]) / current,
         math.sqrt(sum(change * change for change in changes) / len(changes)),
+        (ema10 - ema10_previous) / (3.0 * atr),
+        (ema30 - ema30_previous) / (5.0 * atr),
+        (current - prior_high) / atr,
+        (current - prior_low) / atr,
+        min(max((row["close"] - row["low"]) / candle_range, 0.0), 1.0),
+        min(max(upper_wick / candle_range, 0.0), 1.0),
+        min(max(lower_wick / candle_range, 0.0), 1.0),
+        candle_range / atr,
     ]
+    if not all(math.isfinite(value) for value in values):
+        return None
+    return values
 
 
 def build_multitimeframe_features(
@@ -156,8 +198,6 @@ def build_multitimeframe_features(
                 ready = False
                 break
             source_close_time = close_times[timeframe][source_index]
-            # Reject stale data gaps; the latest completed source candle must
-            # be no more than one source interval behind the decision time.
             if decision_time - source_close_time >= TIMEFRAME_SECONDS[timeframe]:
                 ready = False
                 break
