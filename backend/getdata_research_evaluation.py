@@ -47,8 +47,11 @@ def load_m1(path: Path, ask_path: Path | None = None):
         if previous is None:
             unique_rows[row["time"]] = row
         elif previous != row:
-            stamp = datetime.fromtimestamp(row["time"]).isoformat()
-            raise ValueError(f"Conflicting duplicate M1 BID candle at {stamp}.")
+            raise ValueError(
+                "Conflicting duplicate M1 BID candle: "
+                f"epoch_seconds={row['time']}; first={previous}; duplicate={row}. "
+                "The source file must be inspected; no candle was discarded."
+            )
         else:
             duplicate_bid_rows_removed += 1
     rows = list(unique_rows.values())
@@ -81,7 +84,9 @@ def load_m1(path: Path, ask_path: Path | None = None):
                 previous = asks.get(stamp)
                 if previous is not None and previous != candle:
                     raise ValueError(
-                        f"Conflicting duplicate M1 ASK candle at {datetime.fromtimestamp(stamp).isoformat()}."
+                        "Conflicting duplicate M1 ASK candle: "
+                        f"epoch_seconds={stamp}; first={previous}; duplicate={candle}. "
+                        "The source file must be inspected; no candle was discarded."
                     )
                 if previous is not None:
                     duplicate_ask_rows_removed += 1
