@@ -363,12 +363,30 @@ def research_profitability_evaluate(
             spread_cost=spread_cost,
             slippage_cost=slippage_cost,
         )
+        data_status = market.get("data_status")
+        age_seconds = market.get("age_seconds")
+        freshness_warning = None
+        if data_status and data_status != "recent":
+            freshness_warning = (
+                "The latest candle is stale. This is historical research only; "
+                "do not treat it as a current market setup."
+            )
         return {
             **result,
             "symbol": symbol,
             "timeframe": selected_timeframe,
             "data_source": source_label,
             "broker_source": broker_source,
+            "candle_count": market.get("count", result.get("candle_count")),
+            "last_candle_at": market.get("last_candle_at"),
+            "age_seconds": age_seconds,
+            "data_status": data_status or "unknown",
+            "data_freshness_warning": freshness_warning,
+            "costs_warning": (
+                "Spread and slippage default to zero unless supplied. "
+                "Supply broker-calibrated round-trip price costs before judging profitability."
+                if spread_cost == 0 and slippage_cost == 0 else None
+            ),
             "research_only": True,
             "read_only": True,
             "execution_enabled": False,
