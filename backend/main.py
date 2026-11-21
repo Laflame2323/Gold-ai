@@ -324,6 +324,63 @@ def research_backtest_holdout(
         raise HTTPException(status_code=502, detail=str(exc))
 
 
+@app.get("/research/profitability/evaluate")
+def research_profitability_evaluate(
+    timeframe: str = "M15",
+    horizon: int = 24,
+    stop_atr: float = 1.5,
+    target_r: float = 2.0,
+    spread_cost: float = 0.0,
+    slippage_cost: float = 0.0,
+):
+    """Evaluate a fixed XAUUSD strategy by net R, profit factor and drawdown."""
+    from profitability_research import evaluate_net_expectancy
+
+    selected_timeframe = timeframe.upper()
+    supported = {"M1", "M5", "M15", "M30", "H1", "H4"}
+    if selected_timeframe not in supported:
+        raise HTTPException(status_code=400, detail="Unsupported timeframe.")
+    try:
+        mt5_source = get_latest_mt5_source()
+        if mt5_source:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], selected_timeframe
+            )
+            source_label = "Authenticated MT5 broker archive (read-only)"
+            symbol = mt5_source["symbol"]
+            broker_source = mt5_source["source"]
+        else:
+            market = get_market_candles(selected_timeframe)
+            source_label = "XAUS reference-market feed (not broker execution prices)"
+            symbol = market.get("symbol", "XAUUSD")
+            broker_source = None
+
+        result = evaluate_net_expectancy(
+            market.get("candles") or [],
+            horizon=horizon,
+            stop_atr=stop_atr,
+            target_r=target_r,
+            spread_cost=spread_cost,
+            slippage_cost=slippage_cost,
+        )
+        return {
+            **result,
+            "symbol": symbol,
+            "timeframe": selected_timeframe,
+            "data_source": source_label,
+            "broker_source": broker_source,
+            "research_only": True,
+            "read_only": True,
+            "execution_enabled": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 @app.get("/research/ml/evaluate")
 def research_ml_evaluate(timeframe: str = "H1", horizon: int = 5, min_move_pct: float = 0.0):
     """Train an ephemeral research candidate and score a later chronological test block."""
