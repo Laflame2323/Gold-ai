@@ -153,6 +153,15 @@ def _simulate(rows, start, end, horizon, stop_atr, target_r, spread_cost, slippa
     return trades
 
 
+def _directional_metrics(trades, evaluated_points):
+    """Return separate BUY and SELL metrics using the same evaluation window."""
+    output = {}
+    for side in ("BUY", "SELL"):
+        selected = [trade for trade in trades if trade["side"] == side]
+        output[side.lower()] = _metrics(selected, evaluated_points, side.lower())
+    return output
+
+
 def evaluate_net_expectancy(
     candles, horizon=24, stop_atr=1.5, target_r=2.0,
     spread_cost=0.0, slippage_cost=0.0, holdout_fraction=0.25,
@@ -201,6 +210,10 @@ def evaluate_net_expectancy(
                        "spread_cost": spread_cost, "slippage_cost": slippage_cost},
         "development": dev_metrics,
         "holdout": test_metrics,
+        "directional_breakdown": {
+            "development": _directional_metrics(development, development_points),
+            "holdout": _directional_metrics(holdout, holdout_points),
+        },
         "research_gate": "candidate_passes_initial_gate" if passed else "not_proven_profitable",
         "minimum_holdout_trades_for_gate": 30,
         "limitations": [
