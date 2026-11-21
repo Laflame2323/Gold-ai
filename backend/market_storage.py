@@ -97,10 +97,12 @@ def get_latest_mt5_source():
     return {"symbol": symbol, "source": source, "fetched_at": row.get("fetched_at")}
 
 
-def get_mt5_market_candles(symbol, source, timeframe, now=None):
+def get_mt5_market_candles(symbol, source, timeframe, now=None, max_candles=50000):
     """Read one broker-specific timeframe; never mix brokers or reference feeds."""
     if timeframe not in MT5_TIMEFRAME_SECONDS:
         raise MarketStorageError("Unsupported MT5 timeframe.")
+    if isinstance(max_candles, bool) or not isinstance(max_candles, int) or not 1000 <= max_candles <= 50000:
+        raise MarketStorageError("max_candles must be an integer between 1,000 and 50,000.")
     base_params = {
         "select": "candle_time,open,high,low,close,volume,fetched_at,quality_status,is_closed",
         "symbol": f"eq.{symbol}",
@@ -116,7 +118,14 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None):
     rows = []
     page_logger = logging.getLogger("uvicorn.error")
     archive_started = time.perf_counter()
-    for offset in range(0, 10000, 1000):
+    # Keep the archive intact; callers may request a smaller read window for research.
+    # Pages remain at 1,000 rows to respect common Supabase PostgREST limits.
+    max_archive_candles = max_candles
+    page_logger.info(
+        "MT5_ARCHIVE_READ_LIMIT timeframe=%s max_candles=%s page_size=1000",
+        timeframe, max_archive_candles,
+    )
+    for offset in range(0, max_archive_candles, 1000):
         page_started = time.perf_counter()
         page = _read_supabase_rows(urlencode({**base_params, "offset": str(offset)}))
         page_logger.info(
