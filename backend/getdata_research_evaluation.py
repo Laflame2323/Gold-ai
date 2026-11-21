@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from triple_barrier_research import _atr, evaluate_triple_barrier_meta
-from profit_aware_research import evaluate_profit_aware_meta
+from profit_aware_research import evaluate_profit_aware_meta, evaluate_expected_return_meta
 
 
 def load_m1(path: Path, ask_path: Path | None = None):
@@ -311,12 +311,38 @@ def main():
         base_timeframe="H1", round_trip_cost_atr=round_trip_cost_atr,
     )
     report["profit_aware_evaluations"][f"H1_PT2.0_SL1.0_COST{round_trip_cost_atr:.4f}"] = h1_result
+
+    # Independent regression objective: predict expected net R directly rather than
+    # classifying a setup as profitable/not profitable.
+    report["expected_return_evaluations"] = {
+        "M30_PT1.0_SL1.0": evaluate_expected_return_meta(
+            candles, horizon=24, pt_atr=1.0, sl_atr=1.0,
+            base_timeframe="M30", round_trip_cost_atr=round_trip_cost_atr,
+        ),
+        "H1_PT2.0_SL1.0": evaluate_expected_return_meta(
+            candles, horizon=12, pt_atr=2.0, sl_atr=1.0,
+            base_timeframe="H1", round_trip_cost_atr=round_trip_cost_atr,
+        ),
+    }
     if h1_result.get("status") not in {"complete", "no_positive_validation_edge"}:
         raise SystemExit(f"H1 evaluation failed: {h1_result}")
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8-sig")
     print(json.dumps({"profit_aware_grid_selection": report["profit_aware_grid_selection"]}, indent=2))
+    for configuration, result in report.get("expected_return_evaluations", {}).items():
+        print(json.dumps({
+            "expected_return_configuration": configuration,
+            "status": result.get("status"),
+            "message": result.get("message"),
+            "selected_parameters": result.get("selected_parameters"),
+            "minimum_predicted_net_r": result.get("minimum_predicted_net_r"),
+            "validation_trade_metrics": result.get("validation_trade_metrics"),
+            "untouched_test": result.get("untouched_test"),
+            "split_samples": result.get("split_samples"),
+            "split_decisions": result.get("split_decisions"),
+        }, indent=2))
+
     for configuration, result in report["profit_aware_evaluations"].items():
         summary = {
             "configuration": configuration,
