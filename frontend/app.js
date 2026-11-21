@@ -7,6 +7,7 @@ let candleSeries = null;
 let candleResizeObserver = null;
 let spotRequestInFlight = false;
 let candleRequestInFlight = false;
+let pendingCandleTimeframe = null;
 let lastSpotPrice = null;
 let lastCandleStamp = null;
 let monitorRequestInFlight = false;
@@ -181,7 +182,11 @@ async function loadGoldPrice() {
 }
 
 async function loadCandles(timeframe = selectedTimeframe) {
-  if (candleRequestInFlight) return;
+  if (candleRequestInFlight) {
+    // Keep the latest user-selected timeframe instead of silently dropping taps.
+    if (timeframe !== selectedTimeframe) pendingCandleTimeframe = timeframe;
+    return;
+  }
   candleRequestInFlight = true;
   selectedTimeframe = timeframe;
   $("selectedTimeframe").textContent = timeframe;
@@ -270,6 +275,11 @@ async function loadCandles(timeframe = selectedTimeframe) {
     setChartStatus("Feed unavailable", "error");
   } finally {
     candleRequestInFlight = false;
+    const nextTimeframe = pendingCandleTimeframe;
+    pendingCandleTimeframe = null;
+    if (nextTimeframe && nextTimeframe !== selectedTimeframe) {
+      loadCandles(nextTimeframe);
+    }
   }
 }
 
