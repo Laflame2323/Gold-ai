@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from urllib.request import Request
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, _fetch_json_with_retries, get_market_candles, get_daily_history, get_intraday_prices
-from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run, get_latest_mt5_source, get_mt5_market_candles, MarketStorageError
+from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run, get_latest_mt5_source, get_mt5_market_candles, mt5_timeframes_are_fresh, MarketStorageError
 from cot_data import COTDataError, get_gold_cot
 from macro_data import MacroDataError, get_macro_context
 import json
@@ -59,28 +59,48 @@ def analyse():
     archive_results = {}
     provider_errors = {}
     mt5_source = None
+    mt5_selected = False
+    mt5_fallback_reason = None
 
-    # Prefer one broker's own feed when it is present. Never mix MT5 and XAUS
-    # candles in the same analysis.
+    # Use broker data only when every required timeframe is present and fresh.
+    # Otherwise use the separate reference feed; never mix the two sources.
     try:
         mt5_source = get_latest_mt5_source()
     except MarketStorageError as exc:
-        provider_errors["MT5 archive"] = str(exc)[:300]
+        mt5_fallback_reason = f"MT5 archive unavailable: {str(exc)[:200]}"
 
     if mt5_source:
+        broker_market_data = {}
+        broker_errors = {}
         for timeframe in selected_timeframes:
             try:
-                market_data[timeframe] = get_mt5_market_candles(
+                broker_market_data[timeframe] = get_mt5_market_candles(
                     mt5_source["symbol"], mt5_source["source"], timeframe
                 )
             except Exception as exc:
-                provider_errors[timeframe] = str(exc)[:300]
-        history_archive = {}
-        collector_audit = {"status": "already_archived", "source": mt5_source["source"]}
-        data_source = "Authenticated MT5 broker feed (read-only)"
-        response_symbol = mt5_source["symbol"]
-    else:
-        # Reference feed is used only when no broker feed has been archived.
+                broker_errors[timeframe] = str(exc)[:200]
+
+        if mt5_timeframes_are_fresh(broker_market_data, selected_timeframes):
+            market_data = broker_market_data
+            mt5_selected = True
+            history_archive = {}
+            collector_audit = {"status": "already_archived", "source": mt5_source["source"]}
+            data_source = "Authenticated MT5 broker feed (read-only)"
+            response_symbol = mt5_source["symbol"]
+        else:
+            statuses = {
+                timeframe: (broker_market_data.get(timeframe) or {}).get("data_status", "unavailable")
+                for timeframe in selected_timeframes
+            }
+            mt5_fallback_reason = (
+                "Archived MT5 feed is incomplete or stale; using the separate XAUS "
+                "reference feed instead. Broker and reference candles are not mixed. "
+                f"MT5 timeframe status: {statuses}"
+            )
+            if broker_errors:
+                mt5_fallback_reason += f" MT5 read errors: {broker_errors}"
+
+    if not mt5_selected:
         with ThreadPoolExecutor(max_workers=6) as executor:
             jobs = {
                 executor.submit(get_market_candles, timeframe): timeframe
@@ -123,7 +143,7 @@ def analyse():
         analysis["alignment_score"] = 0
         analysis["message"] += " Data errors: " + error_summary
 
-    if mt5_source:
+    if mt5_selected:
         message = analysis["message"] + (
             " These are authenticated broker candles, but Gold AI remains research-only; "
             "demo execution is not connected or enabled."
@@ -133,6 +153,8 @@ def analyse():
             " The current feed is XAUS reference-market data, not your MT5 broker's "
             "execution feed. Connect the read-only MT5 bridge for broker-specific analysis."
         )
+        if mt5_fallback_reason:
+            message += " " + mt5_fallback_reason
 
     return {
         "symbol": response_symbol,
@@ -141,6 +163,7 @@ def analyse():
         "execution_ready": False,
         "research_only": True,
         "data_source": data_source,
+        "broker_fallback_reason": mt5_fallback_reason if not mt5_selected else None,
         "archive_status": archive_results,
         "history_archive": history_archive,
         "collector_audit": collector_audit,
