@@ -107,7 +107,7 @@ def analyse():
                 for timeframe in selected_timeframes
             }
             for job in as_completed(jobs):
-                timeframe = job.result if False else jobs[job]
+                timeframe = jobs[job]
                 try:
                     market_data[timeframe] = job.result()
                     archive_results[timeframe] = archive_market_candles(market_data[timeframe])
