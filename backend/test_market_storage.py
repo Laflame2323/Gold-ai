@@ -58,6 +58,19 @@ class MarketStorageTests(unittest.TestCase):
         self.assertEqual(result["source"], "MT5:Broker MT5 Demo")
         self.assertIn("source=like.MT5", read_rows.call_args.args[0])
 
+    def test_mt5_timeframes_require_all_fresh_nonempty_feeds(self):
+        required = ["M1", "M5", "M15"]
+        fresh = {
+            timeframe: {"data_status": "recent", "candles": [{"time": 1}]}
+            for timeframe in required
+        }
+        self.assertTrue(market_storage.mt5_timeframes_are_fresh(fresh, required))
+        stale = {**fresh, "M5": {"data_status": "stale", "candles": [{"time": 1}]}}
+        self.assertFalse(market_storage.mt5_timeframes_are_fresh(stale, required))
+        missing = {**fresh, "M15": {"data_status": "recent", "candles": []}}
+        self.assertFalse(market_storage.mt5_timeframes_are_fresh(missing, required))
+        self.assertFalse(market_storage.mt5_timeframes_are_fresh(fresh, ["M1", "H4"]))
+
     @patch("market_storage._read_supabase_rows")
     def test_mt5_candles_are_sorted_and_freshness_checked(self, read_rows):
         read_rows.return_value = [
