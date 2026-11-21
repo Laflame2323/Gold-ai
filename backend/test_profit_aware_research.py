@@ -6,6 +6,7 @@ from profit_aware_research import (
     _trade_metrics_r,
     _trade_returns_r,
     _best_side_rows,
+    _best_expected_return_rows,
     _non_overlapping_rows,
     _calendar_features,
     _regime_features,
@@ -186,6 +187,14 @@ class ProfitAwareResearchTests(unittest.TestCase):
         self.assertEqual(set(selected), {10, 11})
         self.assertEqual(selected[10][1], 1)
         self.assertEqual(selected[11][1], 2)
+
+    def test_expected_return_selects_highest_net_r_side_per_candle(self):
+        rows = [0, 1, 2, 3]
+        decisions = [10, 10, 11, 11]
+        selected = _best_expected_return_rows([0.12, 0.31, -0.04, 0.08], rows, decisions)
+        self.assertEqual(set(selected), {10, 11})
+        self.assertEqual(selected[10], (0.31, 1))
+        self.assertEqual(selected[11], (0.08, 3))
 
     def test_directional_threshold_counts_one_trade_per_candle(self):
         outcomes, sides, probabilities, decisions = [], [], [], []

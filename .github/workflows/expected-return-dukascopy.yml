@@ -1,0 +1,118 @@
+name: Gold AI expected-return Dukascopy research
+
+on:
+  push:
+    branches:
+      - research/expected-net-return-model
+    paths:
+      - ".github/workflows/expected-return-dukascopy.yml"
+      - "backend/dukascopy_data.py"
+      - "backend/getdata_research_evaluation.py"
+      - "backend/profit_aware_research.py"
+      - "backend/multitimeframe_features.py"
+      - "backend/causal_smc_features.py"
+      - "backend/triple_barrier_research.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expected-return-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out expected-return research branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/expected-net-return-model
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      - name: Download one year of matched XAUUSD M1 bid/ask data
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import date, timedelta
+          from pathlib import Path
+          import subprocess
+          start = date(2025, 11, 1)
+          end = date(2026, 11, 1)
+          cursor = start
+          while cursor < end:
+              next_day = min(cursor + timedelta(days=31), end)
+              print(f"Downloading {cursor} through {next_day} (end exclusive)", flush=True)
+              subprocess.run([
+                  "python", "backend/dukascopy_data.py",
+                  "--start", cursor.isoformat(),
+                  "--end", next_day.isoformat(),
+                  "--output-dir", "data/dukascopy"
+              ], check=True)
+              cursor = next_day
+          files = sorted(Path("data/dukascopy").glob("*.csv"))
+          if not files:
+              raise SystemExit("No Dukascopy CSV files were downloaded.")
+          print(f"Downloaded {len(files)} monthly/chunk files.", flush=True)
+          PY
+
+      - name: Build matched BID and ASK input files
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          source_files = sorted(Path("data/dukascopy").glob("*.csv"))
+          out_dir = Path("data/dukascopy/combined")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          fields = ["timestamp", "open", "high", "low", "close", "volume"]
+          outputs = {
+              side: (out_dir / f"xauusd_m1_{side}.csv").open("w", newline="", encoding="utf-8")
+              for side in ("bid", "ask")
+          }
+          try:
+              writers = {side: csv.DictWriter(handle, fieldnames=fields) for side, handle in outputs.items()}
+              for writer in writers.values():
+                  writer.writeheader()
+              count = 0
+              for path in source_files:
+                  with path.open(newline="", encoding="utf-8") as handle:
+                      for row in csv.DictReader(handle):
+                          for side in ("bid", "ask"):
+                              writers[side].writerow({
+                                  "timestamp": row["timestamp"],
+                                  "open": row[f"{side}_open"],
+                                  "high": row[f"{side}_high"],
+                                  "low": row[f"{side}_low"],
+                                  "close": row[f"{side}_close"],
+                                  "volume": row[f"{side}_volume"],
+                              })
+                          count += 1
+              if count < 10000:
+                  raise SystemExit(f"Too few matched M1 rows for a meaningful research run: {count}")
+              print(f"Prepared {count} matched bid/ask M1 rows.")
+          finally:
+              for handle in outputs.values():
+                  handle.close()
+          PY
+
+      - name: Run chronological M30 and H1 model evaluation
+        run: |
+          python backend/getdata_research_evaluation.py \
+            --input data/dukascopy/combined/xauusd_m1_bid.csv \
+            --ask-input data/dukascopy/combined/xauusd_m1_ask.csv \
+            --output data/dukascopy/combined/expected_return_evaluation.json
+
+      - name: Preserve dataset audit and research results
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-ai-expected-return-dukascopy-1y
+          path: data/dukascopy/
+          if-no-files-found: error
+          retention-days: 30

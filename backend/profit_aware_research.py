@@ -707,3 +707,170 @@ def evaluate_profit_aware_meta(candles_by_timeframe, horizon=24, pt_atr=1.5,
             "Probability calibration is not performed.",
         ],
     }
+
+
+def _best_expected_return_rows(predictions, rows, decisions):
+    """Choose the BUY or SELL candidate with the highest predicted net R per setup."""
+    best = {}
+    for prediction, row in zip(predictions, rows):
+        decision = decisions[row]
+        current = best.get(decision)
+        if current is None or float(prediction) > current[0]:
+            best[decision] = (float(prediction), row)
+    return best
+
+
+def evaluate_expected_return_meta(candles_by_timeframe, horizon=24, pt_atr=1.0,
+                                   sl_atr=1.0, base_timeframe="M30",
+                                   round_trip_cost_atr=0.0):
+    """Research a direct expected-net-R model; choose trades by predicted value, not class accuracy."""
+    from sklearn.ensemble import ExtraTreesRegressor, HistGradientBoostingRegressor
+
+    if not math.isfinite(round_trip_cost_atr) or not 0 <= round_trip_cost_atr <= 2:
+        raise ValueError("round_trip_cost_atr must be between 0 and 2.")
+    if not math.isfinite(pt_atr) or pt_atr <= 0 or not math.isfinite(sl_atr) or sl_atr <= 0:
+        raise ValueError("pt_atr and sl_atr must be positive finite values.")
+    sample, error = _make_directional_samples(
+        candles_by_timeframe, horizon, float(pt_atr), float(sl_atr), base_timeframe
+    )
+    if error:
+        return error
+
+    decisions = sample["decisions"]
+    outcomes, sides = sample["outcomes"], sample["sides"]
+    gross_returns_r = sample["gross_returns_r"]
+    x = sample["x"]
+    cost_r = round_trip_cost_atr / float(sl_atr)
+    net_targets = np.asarray(gross_returns_r, dtype=np.float64) - cost_r
+    start, end = min(decisions), max(decisions) + 1
+    span = end - start
+    train_edge = start + int(span * 0.70)
+    validation_edge = start + int(span * 0.85)
+    embargo_bars = horizon
+    decision_label_end = {}
+    for decision, label_end in zip(decisions, sample["label_ends"]):
+        decision_label_end[decision] = max(decision_label_end.get(decision, 0), label_end)
+    train = [i for i, decision in enumerate(decisions)
+             if decision_label_end[decision] < train_edge
+             and decision < train_edge - embargo_bars]
+    validation = [i for i, decision in enumerate(decisions)
+                  if decision >= train_edge + embargo_bars
+                  and decision_label_end[decision] < validation_edge]
+    test = [i for i, decision in enumerate(decisions)
+            if decision >= validation_edge + embargo_bars]
+    split_samples = {"train": len(train), "validation": len(validation), "test": len(test)}
+    split_decisions = {
+        name: len({decisions[i] for i in indices})
+        for name, indices in (("train", train), ("validation", validation), ("test", test))
+    }
+    if min(split_samples.values()) < MIN_ROWS_PER_SPLIT:
+        return {
+            "status": "insufficient_data", "model_type": "expected_net_return_regression",
+            "ai_trained": False, "split_samples": split_samples,
+            "split_decisions": split_decisions, "minimum_samples_per_split": MIN_ROWS_PER_SPLIT,
+        }
+
+    specs = [
+        {"family": "hist_gradient_boosting_regressor", "leaves": 7, "rate": 0.03},
+        {"family": "extra_trees_regressor", "trees": 180, "depth": 8,
+         "min_samples_leaf": 20, "max_features": 0.8},
+    ]
+    threshold_grid = (0.0, 0.025, 0.05, 0.075, 0.10, 0.15, 0.20, 0.30)
+    evaluated = []
+    for spec in specs:
+        if spec["family"] == "hist_gradient_boosting_regressor":
+            model = HistGradientBoostingRegressor(
+                max_iter=200, learning_rate=spec["rate"],
+                max_leaf_nodes=spec["leaves"], l2_regularization=2.0,
+                early_stopping=False, random_state=41,
+            )
+        else:
+            model = ExtraTreesRegressor(
+                n_estimators=spec["trees"], max_depth=spec["depth"],
+                min_samples_leaf=spec["min_samples_leaf"],
+                max_features=spec["max_features"], n_jobs=1, random_state=41,
+            )
+        model.fit(x[train], net_targets[train])
+        validation_predictions = model.predict(x[validation])
+        best_by_decision = _best_expected_return_rows(validation_predictions, validation, decisions)
+        threshold_rows = []
+        validation_decision_count = len({decisions[i] for i in validation})
+        min_trades = max(20, int(math.ceil(validation_decision_count * 0.05)))
+        for threshold in threshold_grid:
+            selected = [row for prediction, row in best_by_decision.values()
+                        if prediction >= threshold]
+            selected = _non_overlapping_rows(selected, decisions, sample["label_ends"])
+            realized = _trade_returns_r(
+                outcomes, sides, selected, pt_atr, sl_atr, round_trip_cost_atr,
+                gross_returns_r=gross_returns_r,
+            )
+            metrics = _trade_metrics_r(realized, max_range=pt_atr / sl_atr + 1.0)
+            metrics["coverage_pct"] = round(
+                len(selected) / validation_decision_count * 100, 2
+            ) if validation_decision_count else 0.0
+            threshold_rows.append({"minimum_predicted_net_r": threshold, **metrics})
+        eligible = [row for row in threshold_rows
+                    if row["trades"] >= min_trades
+                    and row["mean_net_r_lower_90_bound"] is not None]
+        best_row = max(eligible, key=lambda row: (
+            row["mean_net_r_lower_90_bound"], row["mean_net_r"], row["trades"]
+        )) if eligible else None
+        evaluated.append({
+            "spec": spec, "model": model, "best_validation": best_row,
+            "threshold_search": threshold_rows,
+        })
+
+    qualified = [item for item in evaluated
+                 if item["best_validation"]
+                 and item["best_validation"]["mean_net_r_lower_90_bound"] > 0]
+    if not qualified:
+        return {
+            "status": "no_positive_validation_edge",
+            "model_type": "expected_net_return_regression",
+            "message": "No expected-return model passed the positive validation net-expectancy bound.",
+            "candidate_validation_summary": [
+                {"model_parameters": item["spec"], "best_validation": item["best_validation"],
+                 "threshold_search": item["threshold_search"]}
+                for item in evaluated
+            ],
+            "split_samples": split_samples, "split_decisions": split_decisions,
+            "test_used_for_selection": False, "research_only": True,
+            "execution_enabled": False, "model_persisted": False,
+        }
+
+    best = max(qualified, key=lambda item: (
+        item["best_validation"]["mean_net_r_lower_90_bound"],
+        item["best_validation"]["mean_net_r"], item["best_validation"]["trades"]
+    ))
+    test_predictions = best["model"].predict(x[test])
+    best_test_sides = _best_expected_return_rows(test_predictions, test, decisions)
+    threshold = best["best_validation"]["minimum_predicted_net_r"]
+    accepted = [row for prediction, row in best_test_sides.values() if prediction >= threshold]
+    accepted = _non_overlapping_rows(accepted, decisions, sample["label_ends"])
+    test_returns = _trade_returns_r(
+        outcomes, sides, accepted, pt_atr, sl_atr, round_trip_cost_atr,
+        gross_returns_r=gross_returns_r,
+    )
+    test_metrics = _trade_metrics_r(test_returns, max_range=pt_atr / sl_atr + 1.0)
+    test_decision_count = len({decisions[i] for i in test})
+    test_metrics["coverage_pct"] = round(
+        len(accepted) / test_decision_count * 100, 2
+    ) if test_decision_count else 0.0
+    test_metrics["test_setups"] = test_decision_count
+    test_metrics["predicted_mean_net_r"] = round(
+        float(np.mean([prediction for prediction, row in best_test_sides.values()
+                       if row in set(accepted)])), 4
+    ) if accepted else None
+    return {
+        "status": "complete", "model_type": "expected_net_return_regression",
+        "selected_parameters": best["spec"], "minimum_predicted_net_r": threshold,
+        "validation_trade_metrics": best["best_validation"],
+        "validation_threshold_search": best["threshold_search"],
+        "untouched_test": test_metrics, "round_trip_cost_atr_assumption": round_trip_cost_atr,
+        "bid_ask_execution_prices_used": sample["bid_ask_prices_used"],
+        "split_samples": split_samples, "split_decisions": split_decisions,
+        "threshold_selected_on_validation_only": True, "test_used_for_selection": False,
+        "non_overlapping_trade_selection": True, "maximum_concurrent_positions": 1,
+        "research_only": True, "read_only": True, "execution_enabled": False,
+        "model_persisted": False, "ai_trained": False,
+    }
