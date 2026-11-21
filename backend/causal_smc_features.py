@@ -25,7 +25,67 @@ FEATURE_NAMES = [
     "smc_upper_wick_to_range",
     "smc_lower_wick_to_range",
     "smc_tick_volume_ratio",
+    "regime_cusum_up_strength",
+    "regime_cusum_down_strength",
+    "regime_cusum_up_trigger",
+    "regime_cusum_down_trigger",
+    "regime_volatility_ratio",
 ]
+
+
+def _cusum_regime_features(candles, index: int) -> list[float]:
+    """Return bounded, causal CUSUM change-point and volatility features.
+
+    The CUSUM state is rebuilt from a trailing window so it is deterministic
+    for a decision candle and never reads candles after index. Returns are
+    standardised by volatility estimated only from earlier returns.
+    """
+    first = max(1, index - 60)
+    returns = []
+    for position in range(first, index + 1):
+        previous_close = float(candles[position - 1]["close"])
+        current_close = float(candles[position]["close"])
+        if previous_close <= 0 or current_close <= 0:
+            raise ValueError("Candle closes must be positive")
+        returns.append(current_close / previous_close - 1.0)
+
+    positive, negative = 0.0, 0.0
+    allowance, threshold = 0.5, 5.0
+    for offset, value in enumerate(returns):
+        history = returns[max(0, offset - 20):offset]
+        if len(history) >= 5:
+            mean = sum(history) / len(history)
+            variance = sum((item - mean) ** 2 for item in history) / len(history)
+            scale = math.sqrt(variance)
+        else:
+            prior = returns[:offset]
+            if len(prior) >= 2:
+                mean = sum(prior) / len(prior)
+                scale = math.sqrt(sum((item - mean) ** 2 for item in prior) / len(prior))
+            else:
+                scale = 0.0
+        # A tiny floor prevents division by zero on flat-price histories.
+        z_score = (value / max(scale, 1e-8))
+        positive = max(0.0, positive + z_score - allowance)
+        negative = max(0.0, negative - z_score - allowance)
+
+    recent = returns[-10:]
+    longer = returns[-50:]
+    def realised_vol(values):
+        if len(values) < 2:
+            return 0.0
+        mean = sum(values) / len(values)
+        return math.sqrt(sum((item - mean) ** 2 for item in values) / len(values))
+    short_vol, long_vol = realised_vol(recent), realised_vol(longer)
+    volatility_ratio = short_vol / max(long_vol, 1e-8) if long_vol > 0 else 1.0
+
+    return [
+        min(positive / threshold, 3.0),
+        min(negative / threshold, 3.0),
+        float(positive >= threshold),
+        float(negative >= threshold),
+        min(max(volatility_ratio, 0.0), 10.0),
+    ]
 
 
 def causal_smc_features(candles, index: int, atr: float) -> list[float]:
@@ -87,4 +147,5 @@ def causal_smc_features(candles, index: int, atr: float) -> list[float]:
         (high - max(open_, close)) / span,
         (min(open_, close) - low) / span,
         min(max(volume_ratio, 0.0), 10.0),
+        *_cusum_regime_features(candles, index),
     ]
