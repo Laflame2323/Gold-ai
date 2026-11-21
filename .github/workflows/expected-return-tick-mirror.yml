@@ -65,6 +65,9 @@ jobs:
               raise SystemExit(f"Expected 53 weekly files, found {len(source_files)}")
 
           out = Path("data/dukascopy/combined")
+          # Remove any checked-in/stale candle files before rebuilding from the raw ticks.
+          import shutil
+          shutil.rmtree(out, ignore_errors=True)
           out.mkdir(parents=True, exist_ok=True)
           bid_path = out / "xauusd_m1_bid.csv"
           ask_path = out / "xauusd_m1_ask.csv"
