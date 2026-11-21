@@ -1,0 +1,183 @@
+name: Gold AI tick-mirror expected-return research
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gold-ai-tick-mirror-research
+  cancel-in-progress: false
+
+jobs:
+  expected-return-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out research-only model branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/expected-net-return-model
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pandas
+
+      - name: Download audited public XAUUSD tick archives
+        run: |
+          set -euo pipefail
+          mkdir -p data/tick_source/2025 data/tick_source/2026
+          for week in $(seq -w 47 53); do
+            file="XAUUSD_2025_w${week}.csv.gz"
+            url="https://raw.githubusercontent.com/Touhid-HZ/xauusd-tick-data-2025/main/data/tick/${file}"
+            echo "Downloading ${file}"
+            curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors "${url}" -o "data/tick_source/2025/${file}"
+          done
+          for week in $(seq -w 1 46); do
+            file="XAUUSD_2026_w${week}.csv.gz"
+            url="https://raw.githubusercontent.com/Touhid-HZ/xauusd-tick-data-2026/main/data/tick/${file}"
+            echo "Downloading ${file}"
+            curl --fail --location --retry 5 --retry-delay 3 --retry-all-errors "${url}" -o "data/tick_source/2026/${file}"
+          done
+          echo "Downloaded $(find data/tick_source -name '*.csv.gz' | wc -l) weekly files."
+
+      - name: Validate ticks and build matched M1 BID/ASK candles
+        run: |
+          python - <<'PY'
+          import csv
+          import gzip
+          import json
+          from pathlib import Path
+          import pandas as pd
+          import numpy as np
+
+          start = pd.Timestamp("2025-11-21T00:00:00Z")
+          end = pd.Timestamp("2026-11-16T00:00:00Z")
+          source_files = sorted(Path("data/tick_source").glob("*/*.csv.gz"))
+          if len(source_files) != 53:
+              raise SystemExit(f"Expected 53 weekly files, found {len(source_files)}")
+
+          out = Path("data/dukascopy/combined")
+          out.mkdir(parents=True, exist_ok=True)
+          bid_path = out / "xauusd_m1_bid.csv"
+          ask_path = out / "xauusd_m1_ask.csv"
+          bid_fields = ["timestamp", "open", "high", "low", "close", "volume"]
+          ask_fields = bid_fields.copy()
+          audit = {
+              "dataset": "XAUUSD Dukascopy tick mirror, resampled to M1",
+              "repositories": [
+                  "https://github.com/Touhid-HZ/xauusd-tick-data-2025",
+                  "https://github.com/Touhid-HZ/xauusd-tick-data-2026"
+              ],
+              "original_provider": "Dukascopy Bank SA",
+              "license_note": "Repository code/packaging is MIT; underlying market data remains source-owned and is used here for private research only. Raw tick files are not included in the workflow artifact.",
+              "period_start_utc_inclusive": start.isoformat(),
+              "period_end_utc_exclusive": end.isoformat(),
+              "weekly_files": len(source_files),
+              "tick_rows": 0,
+              "invalid_quotes": 0,
+              "m1_rows": 0,
+              "first_tick_utc": None,
+              "last_tick_utc": None,
+              "first_m1_utc": None,
+              "last_m1_utc": None,
+              "all_quotes_ask_ge_bid": True,
+              "timestamps_monotonic_within_file": True
+          }
+
+          last_m1 = None
+          for n, path in enumerate(source_files, 1):
+              frame = pd.read_csv(path, compression="gzip")
+              required = {"timestamp", "ask", "bid", "ask_volume", "bid_volume"}
+              if not required.issubset(frame.columns):
+                  raise SystemExit(f"Unexpected columns in {path.name}: {list(frame.columns)}")
+              frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+              if frame["timestamp"].isna().any():
+                  raise SystemExit(f"Invalid timestamp in {path.name}")
+              if not frame["timestamp"].is_monotonic_increasing:
+                  audit["timestamps_monotonic_within_file"] = False
+                  raise SystemExit(f"Ticks are not time-ordered in {path.name}")
+              for col in ("ask", "bid", "ask_volume", "bid_volume"):
+                  frame[col] = pd.to_numeric(frame[col], errors="coerce")
+              if frame[["ask", "bid", "ask_volume", "bid_volume"]].isna().any().any():
+                  raise SystemExit(f"Non-numeric quote or volume in {path.name}")
+              invalid = int((frame["ask"] < frame["bid"]).sum())
+              audit["invalid_quotes"] += invalid
+              if invalid:
+                  audit["all_quotes_ask_ge_bid"] = False
+                  raise SystemExit(f"{invalid} crossed quotes in {path.name}")
+              if (frame[["ask_volume", "bid_volume"]] < 0).any().any():
+                  raise SystemExit(f"Negative tick volume in {path.name}")
+
+              frame = frame.loc[(frame["timestamp"] >= start) & (frame["timestamp"] < end)].copy()
+              if frame.empty:
+                  continue
+              audit["tick_rows"] += int(len(frame))
+              if audit["first_tick_utc"] is None:
+                  audit["first_tick_utc"] = frame["timestamp"].iloc[0].isoformat()
+              audit["last_tick_utc"] = frame["timestamp"].iloc[-1].isoformat()
+
+              bars = frame.set_index("timestamp").resample("1min", label="left", closed="left").agg(
+                  bid_open=("bid", "first"),
+                  bid_high=("bid", "max"),
+                  bid_low=("bid", "min"),
+                  bid_close=("bid", "last"),
+                  bid_volume=("bid", "count"),
+                  ask_open=("ask", "first"),
+                  ask_high=("ask", "max"),
+                  ask_low=("ask", "min"),
+                  ask_close=("ask", "last"),
+                  ask_volume=("ask", "count"),
+              ).dropna(subset=["bid_open", "ask_open"])
+              if bars.empty:
+                  continue
+              if last_m1 is not None and bars.index[0] <= last_m1:
+                  raise SystemExit(f"Duplicate or overlapping M1 minute near {bars.index[0]}")
+              last_m1 = bars.index[-1]
+              bars.insert(0, "timestamp", bars.index.astype("int64") // 10**9)
+
+              bid = bars[["timestamp", "bid_open", "bid_high", "bid_low", "bid_close", "bid_volume"]].copy()
+              bid.columns = bid_fields
+              ask = bars[["timestamp", "ask_open", "ask_high", "ask_low", "ask_close", "ask_volume"]].copy()
+              ask.columns = ask_fields
+              bid.to_csv(bid_path, mode="a", header=not bid_path.exists(), index=False)
+              ask.to_csv(ask_path, mode="a", header=not ask_path.exists(), index=False)
+              audit["m1_rows"] += int(len(bars))
+              if audit["first_m1_utc"] is None:
+                  audit["first_m1_utc"] = bars.index[0].isoformat()
+              audit["last_m1_utc"] = bars.index[-1].isoformat()
+              print(f"[{n}/{len(source_files)}] {path.name}: {len(frame):,} ticks -> {len(bars):,} M1 bars", flush=True)
+
+          if audit["m1_rows"] < 10000:
+              raise SystemExit(f"Too few M1 rows: {audit['m1_rows']}")
+          (out / "data_audit.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
+          print(json.dumps(audit, indent=2))
+          PY
+
+      - name: Run chronological M30 and H1 expected-return evaluation
+        run: |
+          python backend/getdata_research_evaluation.py \
+            --input data/dukascopy/combined/xauusd_m1_bid.csv \
+            --ask-input data/dukascopy/combined/xauusd_m1_ask.csv \
+            --output data/dukascopy/combined/expected_return_evaluation.json
+
+      - name: Remove third-party raw tick files
+        if: always()
+        run: rm -rf data/tick_source
+
+      - name: Preserve audit and research results only
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-ai-expected-return-tick-mirror-research
+          path: |
+            data/dukascopy/combined/data_audit.json
+            data/dukascopy/combined/expected_return_evaluation.json
+          if-no-files-found: error
+          retention-days: 30
