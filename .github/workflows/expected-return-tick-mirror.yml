@@ -145,8 +145,8 @@ jobs:
                   raise SystemExit(f"Duplicate or overlapping M1 minute near {bars.index[0]}")
               last_m1 = bars.index[-1]
               bars.insert(0, "timestamp", [int(ts.timestamp()) for ts in bars.index])
-          if not bars.empty and not (1_600_000_000 <= int(bars["timestamp"].iloc[0]) <= 2_000_000_000):
-              raise SystemExit(f"Timestamp conversion did not produce Unix seconds: {bars['timestamp'].iloc[0]}")
+              if not (1_600_000_000 <= int(bars["timestamp"].iloc[0]) <= 2_000_000_000):
+                  raise SystemExit(f"Timestamp conversion did not produce Unix seconds: {bars['timestamp'].iloc[0]}")
 
               bid = bars[["timestamp", "bid_open", "bid_high", "bid_low", "bid_close", "bid_volume"]].copy()
               bid.columns = bid_fields
