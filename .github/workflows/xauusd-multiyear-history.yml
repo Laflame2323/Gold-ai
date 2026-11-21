@@ -1,0 +1,78 @@
+name: XAUUSD multi-year history
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/multitimeframe-feature-builder
+    paths:
+      - ".github/workflows/xauusd-multiyear-history.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  download-gold-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Download five-plus years of XAUUSD H4 and D1 bid/ask candles
+        run: |
+          mkdir -p data/xauusd-multiyear
+          for side in bid ask; do
+            npx --yes dukascopy-node@1.51.1 \
+              -i xauusd -from 2020-01-01 -to 2026-11-22 \
+              -t h4 -p "$side" -f csv \
+              -dir data/xauusd-multiyear -fn "xauusd-h4-$side" \
+              --cache --retries 3 --batch-pause 1000
+            npx --yes dukascopy-node@1.51.1 \
+              -i xauusd -from 2020-01-01 -to 2026-11-22 \
+              -t d1 -p "$side" -f csv \
+              -dir data/xauusd-multiyear -fn "xauusd-d1-$side" \
+              --cache --retries 3 --batch-pause 1000
+          done
+      - name: Audit downloaded files
+        run: |
+          python - <<'PY'
+          import csv, glob, json, os
+          report = {}
+          for path in sorted(glob.glob("data/xauusd-multiyear/*.csv")):
+              with open(path, newline="", encoding="utf-8") as f:
+                  rows = list(csv.DictReader(f))
+              if not rows:
+                  raise SystemExit(f"Empty data file: {path}")
+              timestamps = [int(float(row["timestamp"])) for row in rows]
+              if timestamps != sorted(timestamps) or len(timestamps) != len(set(timestamps)):
+                  raise SystemExit(f"Duplicate or unordered timestamps: {path}")
+              report[os.path.basename(path)] = {
+                  "rows": len(rows),
+                  "first_timestamp_ms": timestamps[0],
+                  "last_timestamp_ms": timestamps[-1],
+                  "columns": list(rows[0].keys()),
+              }
+          if len(report) != 4:
+              raise SystemExit(f"Expected 4 bid/ask H4/D1 files, found {len(report)}")
+          with open("data/xauusd-multiyear/data_audit.json", "w") as f:
+              json.dump({
+                  "source": "Dukascopy public historical feed via dukascopy-node",
+                  "instrument": "XAUUSD",
+                  "requested_from": "2020-01-01",
+                  "requested_to_exclusive": "2026-11-22",
+                  "files": report,
+                  "limitations": [
+                      "Reference feed, not the user's Exness execution feed",
+                      "Bid/ask candles are separate OHLC streams, not synchronized tick-by-tick quotes",
+                      "No commission, slippage or swap included in this acquisition audit"
+                  ]
+              }, f, indent=2)
+          print(json.dumps(report, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xauusd-multiyear-h4-d1-bid-ask
+          path: data/xauusd-multiyear/
+          retention-days: 30
