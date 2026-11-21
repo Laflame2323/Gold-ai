@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from multitimeframe_features import build_multitimeframe_features
@@ -29,9 +30,25 @@ class MultiTimeframeFeatureTests(unittest.TestCase):
         }
         result = build_multitimeframe_features(data)
         self.assertGreater(result["row_count"], 0)
-        self.assertEqual(len(result["feature_names"]), 36)
-        self.assertEqual(len(result["rows"][0]["features"]), 36)
+        self.assertEqual(len(result["feature_names"]), 68)
+        self.assertEqual(len(result["rows"][0]["features"]), 68)
         self.assertTrue(result["research_only"])
+
+    def test_new_trend_and_price_action_features_are_finite(self):
+        data = {
+            "H4": candles(100, 14400),
+            "H1": candles(400, 3600),
+            "M30": candles(800, 1800),
+            "M15": candles(1600, 900),
+        }
+        result = build_multitimeframe_features(data)
+        names = result["feature_names"]
+        self.assertIn("h4_ema10_slope_3_atr", names)
+        self.assertIn("h1_distance_prior_high_20_atr", names)
+        self.assertIn("m30_upper_wick_ratio", names)
+        self.assertIn("m15_range_to_atr", names)
+        for row in result["rows"]:
+            self.assertTrue(all(math.isfinite(value) for value in row["features"]))
 
     def test_never_uses_a_candle_that_has_not_closed(self):
         data = {
