@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="mobile-app.css">
 </head>
 <body>
   <div class="app-shell" id="overview">
@@ -76,6 +77,56 @@
           <span class="source-note">Not a broker execution quote</span>
         </div>
       </section>
+
+
+      <div class="dashboard-grid">
+        <section class="panel chart-panel" id="market-chart">
+          <div class="panel-heading chart-heading">
+            <div><p class="eyebrow">PRICE ACTION</p><h2>Gold chart <span class="chart-symbol">XAU/USD</span></h2></div>
+            <div class="chart-status" id="chartStatus"><i></i> Loading candles</div>
+          </div>
+          <div class="chart-toolbar">
+            <div class="timeframes" role="group" aria-label="Chart timeframe">
+              <button type="button" data-timeframe="M1">1m</button>
+              <button type="button" data-timeframe="M5">5m</button>
+              <button type="button" data-timeframe="M15" class="selected">15m</button>
+              <button type="button" data-timeframe="M30">30m</button>
+              <button type="button" data-timeframe="H1">1H</button>
+              <button type="button" data-timeframe="H4">4H</button>
+            </div>
+            <span class="chart-type">CANDLESTICK <span>⌄</span></span>
+          </div>
+          <div class="chart-wrap">
+            <div id="priceChart" role="img" aria-label="XAU USD candlestick chart"></div>
+            <div class="chart-loading" id="chartLoading">Loading market candles...</div>
+          </div>
+          <div class="chart-footer">
+            <span><i class="footer-dot"></i> OHLC market data</span>
+            <span id="candleMeta">Waiting for candle data</span>
+            <span id="lastCandleTime">—</span>
+          </div>
+          <p class="data-warning">Reference-market data can differ from your MT5 broker's prices. Verify the quote before making trading decisions.</p>
+        </section>
+
+        <section class="panel signal-panel" id="ai-signal">
+          <div class="panel-heading">
+            <div><p class="eyebrow">GOLD AI ENGINE</p><h2>Research signal &amp; confidence</h2></div>
+            <span class="ai-mark">✳</span>
+          </div>
+          <div class="signal-card">
+            <div class="signal-top"><span class="metric-label">CURRENT SIGNAL</span><span class="signal-state" id="signalState">VALIDATING</span></div>
+            <div class="signal-value wait" id="signal">WAIT</div>
+            <p id="message" class="signal-message">This panel reports research bias only. It is not a live prediction or a broker instruction.</p><div class="signal-confidence"><span>LIVE MODEL CONFIDENCE</span><strong id="signalConfidence">NOT CALIBRATED</strong></div>
+          </div>
+          <div class="signal-details">
+            <div><span>Entry price</span><strong id="entryValue">—</strong></div>
+            <div><span>Stop loss</span><strong id="stopValue">—</strong></div>
+            <div><span>Take profit</span><strong id="targetValue">—</strong></div>
+          </div>
+          <div class="model-note"><span class="note-icon">i</span><span id="modelStatus">Research model is not persisted. Run an evaluation in the AI Research Lab to inspect historical test confidence.</span></div>
+          <button class="primary-button" id="analyzeBtn" type="button"><span>✳</span> Analyse gold market <b>→</b></button>
+        </section>
+      </div>
 
 
       <section class="panel monitor-panel" id="live-monitor">
@@ -145,55 +196,6 @@
         <p class="alert-disclaimer">Feed-health alerts only. They are not buy/sell instructions or broker notifications.</p>
       </section>
 
-      <div class="dashboard-grid">
-        <section class="panel chart-panel" id="market-chart">
-          <div class="panel-heading chart-heading">
-            <div><p class="eyebrow">PRICE ACTION</p><h2>Gold chart <span class="chart-symbol">XAU/USD</span></h2></div>
-            <div class="chart-status" id="chartStatus"><i></i> Loading candles</div>
-          </div>
-          <div class="chart-toolbar">
-            <div class="timeframes" role="group" aria-label="Chart timeframe">
-              <button type="button" data-timeframe="M1">1m</button>
-              <button type="button" data-timeframe="M5">5m</button>
-              <button type="button" data-timeframe="M15" class="selected">15m</button>
-              <button type="button" data-timeframe="M30">30m</button>
-              <button type="button" data-timeframe="H1">1H</button>
-              <button type="button" data-timeframe="H4">4H</button>
-            </div>
-            <span class="chart-type">CANDLESTICK <span>⌄</span></span>
-          </div>
-          <div class="chart-wrap">
-            <div id="priceChart" role="img" aria-label="XAU USD candlestick chart"></div>
-            <div class="chart-loading" id="chartLoading">Loading market candles...</div>
-          </div>
-          <div class="chart-footer">
-            <span><i class="footer-dot"></i> OHLC market data</span>
-            <span id="candleMeta">Waiting for candle data</span>
-            <span id="lastCandleTime">—</span>
-          </div>
-          <p class="data-warning">Reference-market data can differ from your MT5 broker's prices. Verify the quote before making trading decisions.</p>
-        </section>
-
-        <section class="panel signal-panel" id="ai-signal">
-          <div class="panel-heading">
-            <div><p class="eyebrow">GOLD AI ENGINE</p><h2>Research signal &amp; confidence</h2></div>
-            <span class="ai-mark">✳</span>
-          </div>
-          <div class="signal-card">
-            <div class="signal-top"><span class="metric-label">CURRENT SIGNAL</span><span class="signal-state" id="signalState">VALIDATING</span></div>
-            <div class="signal-value wait" id="signal">WAIT</div>
-            <p id="message" class="signal-message">This panel reports research bias only. It is not a live prediction or a broker instruction.</p><div class="signal-confidence"><span>LIVE MODEL CONFIDENCE</span><strong id="signalConfidence">NOT CALIBRATED</strong></div>
-          </div>
-          <div class="signal-details">
-            <div><span>Entry price</span><strong id="entryValue">—</strong></div>
-            <div><span>Stop loss</span><strong id="stopValue">—</strong></div>
-            <div><span>Take profit</span><strong id="targetValue">—</strong></div>
-          </div>
-          <div class="model-note"><span class="note-icon">i</span><span id="modelStatus">Research model is not persisted. Run an evaluation in the AI Research Lab to inspect historical test confidence.</span></div>
-          <button class="primary-button" id="analyzeBtn" type="button"><span>✳</span> Analyse gold market <b>→</b></button>
-        </section>
-      </div>
-
       <section class="panel research-panel" id="research-lab">
         <div class="panel-heading"><div><p class="eyebrow">MODEL VALIDATION WORKSPACE</p><h2>AI accuracy &amp; training</h2></div><span class="small-tag" id="researchStatus">NOT RUNNING</span></div>
         <div class="research-intro"><div><strong>Multi-timeframe research candidate</strong><p>Fits a temporary model using historical MT5 candles, then scores a later untouched test period. This does not update or replace the production model.</p></div><button class="research-button" id="runResearchBtn" type="button">Run evaluation <span>→</span></button></div>
@@ -249,6 +251,14 @@
       <footer class="page-footer"><span>© 2026 GOLD AI</span><span>Educational market analysis prototype · Not financial advice</span></footer>
     </main>
   </div>
+
+
+  <nav class="mobile-tabbar" aria-label="App navigation">
+    <a class="mobile-tab active" href="#overview"><span>⌂</span><small>Home</small></a>
+    <a class="mobile-tab" href="#market-chart"><span>⌁</span><small>Chart</small></a>
+    <a class="mobile-tab" href="#ai-signal"><span>✳</span><small>AI Signal</small></a>
+    <a class="mobile-tab" href="#live-monitor"><span>◉</span><small>Monitor</small></a>
+  </nav>
 
   <script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
   <script src="app.js"></script>

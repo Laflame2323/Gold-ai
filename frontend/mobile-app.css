@@ -1,0 +1,68 @@
+/* Clean modern trading-app layout */
+.mobile-tabbar { display:none; }
+@media (max-width: 760px) {
+  body { background:#080d1c; padding-bottom:82px; }
+  .sidebar { display:none; }
+  .main-content { margin-left:0; padding:0 14px 28px; width:100%; }
+  .topbar { position:sticky; top:0; z-index:20; height:58px; margin:0 -14px 16px; padding:0 15px; background:rgba(8,13,28,.94); border-bottom:1px solid #263454; backdrop-filter:blur(18px); }
+  .mobile-brand { display:flex; align-items:center; gap:9px; }
+  .mobile-brand .brand-mark { width:30px; height:30px; border-radius:9px; font-size:18px; }
+  .breadcrumb { display:none; }
+  .topbar-right { gap:9px; }
+  .market-indicator { font-size:8px; }
+  .avatar { display:none; }
+  .page-heading { align-items:flex-start; gap:10px; margin:0 0 14px; }
+  .page-heading h1 { margin:2px 0 4px; font-size:22px; letter-spacing:-.7px; }
+  .page-heading .subheading { max-width:250px; font-size:10px; line-height:1.5; }
+  .date-chip { display:none; }
+  .market-overview { display:grid; grid-template-columns:1fr; gap:13px; margin-bottom:13px; padding:15px; border-radius:15px; }
+  .instrument { gap:10px; }
+  .gold-icon { width:37px; height:37px; }
+  .instrument-name { font-size:13px; }
+  .instrument-sub { font-size:9px; }
+  .price-block { padding-top:12px; border-top:1px solid #29385a; }
+  .price-line strong { font-size:30px; letter-spacing:-1px; }
+  .market-source { display:none; }
+  .dashboard-grid { display:flex; flex-direction:column; gap:12px; margin:0 0 13px; }
+  .panel { border-radius:14px; }
+  .chart-panel,.signal-panel { padding:14px; }
+  .panel-heading { gap:8px; }
+  .panel-heading h2 { font-size:14px; }
+  .eyebrow { font-size:8px; letter-spacing:.9px; }
+  .chart-toolbar { overflow-x:auto; }
+  .timeframes { gap:3px; }
+  .timeframes button { min-width:34px; padding:7px 8px; }
+  .chart-wrap { height:270px; }
+  #priceChart { height:270px; }
+  .chart-footer { flex-wrap:wrap; gap:7px; font-size:8px; }
+  .signal-value { font-size:34px; }
+  .signal-details { gap:7px; }
+  .signal-details>div { padding:9px; }
+  .signal-details span { font-size:8px; }
+  .signal-details strong { font-size:11px; }
+  .primary-button { min-height:44px; }
+  .monitor-panel,.broker-panel,.regime-panel,.macro-panel,.cot-panel,.alerts-panel,.research-panel,.lower-grid,.assistant-panel { margin-top:12px; }
+  .monitor-panel,.broker-panel,.regime-panel,.macro-panel,.cot-panel,.alerts-panel,.research-panel,.assistant-panel { padding:14px; }
+  .monitor-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+  .monitor-metric { padding:10px; }
+  .monitor-metric span,.broker-grid span { font-size:7px; }
+  .monitor-metric strong { font-size:11px; }
+  .monitor-metric small { font-size:8px; }
+  .timeframe-monitor-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+  .tf-monitor-item { padding:9px 7px; }
+  .broker-grid,.research-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .regime-alignments { grid-template-columns:1fr; }
+  .macro-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .cot-groups { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .lower-grid { grid-template-columns:1fr; gap:12px; }
+  .page-footer { flex-direction:column; align-items:flex-start; gap:6px; padding:15px 2px 4px; font-size:8px; }
+  .mobile-tabbar { position:fixed; inset:auto 0 0; z-index:50; display:grid; grid-template-columns:repeat(4,1fr); padding:8px 8px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid #29385a; background:rgba(9,15,31,.96); backdrop-filter:blur(20px); box-shadow:0 -8px 28px #0005; }
+  .mobile-tab { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-height:48px; color:#8292b5; border-radius:10px; }
+  .mobile-tab span { font-size:19px; line-height:1; }
+  .mobile-tab small { font-size:9px; font-weight:600; }
+  .mobile-tab.active,.mobile-tab:focus-visible { color:#b7adff; background:#766af21a; }
+  .mobile-tab:active { transform:scale(.97); }
+}
+@media (min-width: 761px) {
+  .mobile-tabbar { display:none; }
+}
