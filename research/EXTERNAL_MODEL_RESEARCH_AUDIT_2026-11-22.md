@@ -83,3 +83,70 @@ The existing D1 BUY candidate that reached 84.5% win rate (71 trades) and the ne
 - https://github.com/vrd07/Quant_Trading
 - https://github.com/vrd07/Quant_Trading/blob/main/RESEARCH_PAPER.md
 - https://github.com/vrd07/Quant_Trading/blob/main/reports/new_strategies_backtest_2026-06-27.md
+
+
+## Expanded review — three additional XAUUSD research systems
+
+### Source C — tcolja/TradingXAUUSD
+Repository: https://github.com/tcolja/TradingXAUUSD
+The project describes a tick-first XAUUSD research engine: M1 and higher bars are built from bid/ask ticks; backtests replay ticks with side-correct fills and include spread, latency, slippage, commission and swap. It screens fixed strategy families before allowing genetic search and reserves a final portion of the dataset from the baseline screen.
+
+**Decision:** high-priority research-engine design reference. The key lesson is to prefer tick-level sequencing and real execution costs over guessing intrabar order from OHLC. Do not adopt any strategy until its exact rules and independent results are reproduced. Repository source reviewed via its public project description; implementation not yet audited line by line.
+
+### Source D — akhshayrm/gold-strategy-backtester
+Repository: https://github.com/akhshayrm/gold-strategy-backtester
+This is a gold-specific minute-by-minute simulator for liquidity sweep + inversion-gap entries. It documents explicit look-ahead truncation tests, random-day audits, bid/ask-side exits and spread costs. Its published case study is especially instructive:
+- Raw setup: 9,637 development trades, average -0.172R, PF 0.74.
+- A filtered/managed version: 2,685 development trades, +0.303R, PF 1.39.
+- Untouched 2025–26 holdout: 776 trades, -0.173R, PF 0.80; reported statistically significant failure (p=0.04).
+- A proposed SMT divergence edge reversed after a look-ahead bug was fixed.
+
+**Decision:** adopt its validation principles, not its example strategy. The main value is demonstrating how an attractive development result can fail on unseen data and how future-data leakage can reverse conclusions. Its published holdout result argues strongly against copying a high in-sample win rate.
+
+### Source E — zero-was-here/tradingbot (Aurum)
+Repository: https://github.com/zero-was-here/tradingbot
+Aurum registers 17 gold strategy forecasts, including time-series momentum, EMA cross, Kalman trend, Donchian breakout, z-score/RSI/Bollinger mean reversion, volatility squeeze, opening-range breakout, macro/risk-off, seasonality, ML, meta-label and RL. Its forecast interface standardizes direction/conviction separately from position sizing and risk.
+
+Its pre-registered H1 walk-forward report uses 18 rolling folds, recorded bid/ask spread, slippage, financing, bootstrap confidence intervals, Deflated Sharpe Ratio and Probability of Backtest Overfitting. Its authors report that neither combined book cleared the pre-registered research gate: walk-forward combined Sharpe -0.26 / -0.17 and DSR 0.003 / 0.007. Its 2025–2026 holdout combined Sharpe was positive at 1.34, but the confidence interval crossed zero. The report therefore concludes no strategy or book had a demonstrated edge.
+
+**Decision:** adopt the common forecast contract, strict point-in-time feature availability, walk-forward model fitting, forecast correlation analysis and multiple-testing corrections. Do not copy the strategy weights or claim that its holdout result proves a robust edge. The report is a useful example of publishing negative research honestly.
+
+### Source F — MarcelNazare/Aurifer
+Repository: https://github.com/MarcelNazare/Aurifer
+Aurifer tests RSI mean reversion, Donchian breakout, squeeze release, order-flow proxy and a calibrated ML predictor. It documents next-bar execution, session/volatility-aware spread, slippage, commission, ATR stops, trailing/partial exits, time stops, Wilson confidence intervals, bootstrap PnL/Sharpe intervals and break-even win rate.
+
+Its README's example daily ML forecast reports walk-forward AUC 0.481 ± 0.022 and labels the model unvalidated. Its example backtest reports 312 trades and 54.2% wins, but the 95% win-rate interval is 48.6–59.6%, total-PnL interval crosses zero, and it explicitly warns not to trade live. The data feed's minute history is limited, so the documented daily example should not be confused with a robust intraday validation.
+
+**Decision:** adopt calibrated probability reporting, confidence intervals, break-even win-rate comparison, and hard fail-closed behavior when statistical checks do not pass. Do not adopt the current example ML predictor.
+
+### Source G — shrijeet-lokhande/GoldBot
+Repository: https://github.com/shrijeet-lokhande/GoldBot
+GoldBot describes a gold-specific candle replay engine, market-structure analysis (BOS/CHOCH/sweeps/FVG/OB), multi-timeframe analysis, transparent logistic prediction, no-look-ahead feature pipeline, independent risk gate, paper broker and approval lifecycle. README claims 253+ backend tests and defaults to paper mode.
+
+**Decision:** architecture reference for our operator workflow: completed-bar analysis, transparent forecast fields, separate proposal/risk approval, paper execution ledger, and auditable trade history. Its README and file tree were reviewed, but predictive edge and independent backtest performance were not established in the material inspected. Treat it as engineering inspiration, not a proven profitable strategy.
+
+## Updated priority ranking
+1. **Gold-specific execution and validation:** TradingXAUUSD tick replay and gold-strategy-backtester look-ahead/cost audits.
+2. **Statistical evaluation:** Aurum and Aurifer confidence intervals, pre-registration, walk-forward, multiple-testing correction and fail-closed rules.
+3. **Architecture and trade workflow:** GoldBot's completed-bar replay, transparent prediction, independent risk gate, paper broker and audit journal.
+4. **Strategy hypotheses to test:** Quant_Trading's Kalman/momentum/VWAP/structure/Fibonacci/SMC/squeeze/pullback families; Aurum's trend, breakout, mean-reversion and macro families.
+5. **Day Trader Skill:** modular pipeline and risk/journal concepts; its stock-specific scanners are not directly portable to gold.
+
+## Next Gold AI research sprint
+- Preserve all current production code and existing D1 candidate unchanged.
+- Build a research-only common strategy interface: a forecast per completed bar in [-1, +1], with direction/confidence separate from position size.
+- Add candidates in small batches, not as a single giant strategy blend.
+- Start with Kalman trend, time-series momentum, VWAP, Donchian/structure breakout, squeeze release and liquidity-sweep/FVG reversal.
+- Run the same chronological bid/ask simulator for every candidate, using next-bar entries, conservative stop-first resolution, costs, and no future data.
+- Record candidate counts and every trial to reduce selection bias. Use a development period, walk-forward folds and a final untouched holdout.
+- Compare BUY and SELL separately, then test regime and timeframe breakdowns.
+- Only combine candidates if out-of-sample returns add diversification and improve net expectancy/drawdown; never combine merely because indicators agree.
+- The 90% target remains aspirational. Do not loosen gates or optimize against the holdout to force 90%.
+
+## Expanded references
+- https://github.com/tcolja/TradingXAUUSD
+- https://github.com/akhshayrm/gold-strategy-backtester
+- https://github.com/zero-was-here/tradingbot
+- https://github.com/zero-was-here/tradingbot/blob/main/docs/RESULTS.md
+- https://github.com/MarcelNazare/Aurifer
+- https://github.com/shrijeet-lokhande/GoldBot
