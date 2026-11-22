@@ -90,3 +90,26 @@ def test_sell_candidate_requires_confirmed_bearish_regime():
     assert setup is not None
     assert setup[0] == -1
     assert setup[1] > 0
+
+
+
+def test_sell_candidate_rejects_non_bearish_breakout_candle():
+    rows = []
+    for i in range(61):
+        close = 2200.0 - i
+        open_price = close + 0.3
+        rows.append({
+            "time": i * 900,
+            "open": open_price,
+            "high": open_price + 0.1,
+            "low": close - 0.1,
+            "close": close,
+        })
+    rows.append({
+        "time": 61 * 900,
+        "open": 2137.5,
+        "high": 2139.2,
+        "low": 2137.2,
+        "close": 2138.0,
+    })
+    assert _signal(rows, len(rows) - 1) is None
