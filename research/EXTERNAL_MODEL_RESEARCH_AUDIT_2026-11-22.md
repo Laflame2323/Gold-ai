@@ -202,3 +202,9 @@ README metrics are author-reported and have not been independently reproduced fr
 - The very high-return external ICT system is not safe to copy: its published OOS pipeline contains same-day daily-data leakage and ambiguous intrabar exit assumptions.
 - The gold regime-classification system has modest walk-forward classification scores and a losing simple trading backtest; macro features remain a research hypothesis only.
 - The next implementation priority for Gold AI is not another indicator or neural network. It is a point-in-time data guard and conservative bid/ask execution engine, followed by controlled testing of one candidate strategy at a time.
+
+## Gold AI implementation progress — point-in-time alignment guard
+Added research-only helper `backend/point_in_time_features.py` with `align_completed_higher_timeframe(...)`. It treats candle timestamps as bar-open Unix seconds and exposes an HTF candle only when its calculated close time is at or before the lower-timeframe decision time. This prevents a daily candle that is still forming from being joined into an intraday decision.
+Added five unittest cases in `backend/test_point_in_time_features.py`: unfinished daily-bar exclusion, exact close-time availability, future-row invariance, duplicate/unsorted timestamp rejection, and invalid timeframe rejection. Three core alignment scenarios were also independently exercised in a local Python check.
+Commit: `4b0f364e74d89dc8f6d628c296bf3d0849f23661` on `research/net-expectancy-engine`.
+Status: isolated research helper and tests only. It is not yet wired into production or the existing backtest endpoint, and it does not infer broker-specific daily session boundaries. GitHub Actions backend test job was still in progress at the time of this audit update; do not mark CI as passed until its final conclusion is successful.
