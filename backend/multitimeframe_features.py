@@ -135,6 +135,7 @@ def build_multitimeframe_features(
         timeframe: _validate_candles(candles_by_timeframe[timeframe], timeframe)
         for timeframe in selected
     }
+    base_interval = TIMEFRAME_SECONDS[base_timeframe]
     # Use one shared point-in-time alignment rule across the research engine.
     # Each base decision is made only after its candle has closed.
     aligned_candles = {
@@ -152,7 +153,6 @@ def build_multitimeframe_features(
     names = _feature_names(selected)
     rows = []
     feature_cache = {timeframe: {} for timeframe in selected}
-    base_interval = TIMEFRAME_SECONDS[base_timeframe]
 
     for base_index, base_candle in enumerate(cleaned[base_timeframe]):
         decision_time = base_candle["time"] + base_interval
