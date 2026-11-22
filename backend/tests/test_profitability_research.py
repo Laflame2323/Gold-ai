@@ -1,7 +1,7 @@
 import math
 import pytest
 
-from profitability_research import evaluate_net_expectancy
+from profitability_research import evaluate_net_expectancy, _signal
 
 
 def make_candles(count=1300):
@@ -63,3 +63,30 @@ def test_rejects_bad_costs_and_unsorted_data():
     candles[10], candles[11] = candles[11], candles[10]
     with pytest.raises(ValueError):
         evaluate_net_expectancy(candles)
+
+
+
+def test_sell_candidate_requires_confirmed_bearish_regime():
+    rows = []
+    for i in range(61):
+        close = 2200.0 - i
+        open_price = close + 0.3
+        rows.append({
+            "time": i * 900,
+            "open": open_price,
+            "high": open_price + 0.1,
+            "low": close - 0.1,
+            "close": close,
+        })
+    # Strong bearish close below the prior 20-candle low.
+    rows.append({
+        "time": 61 * 900,
+        "open": 2139.0,
+        "high": 2139.2,
+        "low": 2137.8,
+        "close": 2138.0,
+    })
+    setup = _signal(rows, len(rows) - 1)
+    assert setup is not None
+    assert setup[0] == -1
+    assert setup[1] > 0
