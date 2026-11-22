@@ -1,6 +1,8 @@
 import math
 import pytest
 
+import profitability_research as base_research
+import bid_ask_profitability_research as bid_ask_research
 from profitability_research import evaluate_net_expectancy, _signal
 
 
@@ -145,3 +147,25 @@ def test_bid_ask_evaluator_rejects_ask_below_bid():
     ask[100]["close"] = bid[100]["close"] - 0.1
     with pytest.raises(ValueError, match="must not be below"):
         evaluate_bid_ask_expectancy(bid, ask)
+
+
+
+def test_simulators_never_exit_before_entry_at_development_boundary(monkeypatch):
+    bid = make_candles()
+    ask = [{key: (value + 0.4 if key in ("open", "high", "low", "close") else value)
+            for key, value in row.items()} for row in bid]
+
+    def signal_only_on_last_allowed_index(rows, index):
+        return (1, 1.0) if index == 60 else None
+
+    monkeypatch.setattr(base_research, "_signal", signal_only_on_last_allowed_index)
+    base_trades = base_research._simulate(
+        bid, 56, 61, 24, 1.5, 2.0, 0.0, 0.0
+    )
+    assert base_trades == []
+
+    monkeypatch.setattr(bid_ask_research, "_signal", signal_only_on_last_allowed_index)
+    bid_ask_trades = bid_ask_research._simulate(
+        bid, ask, 56, 61, 24, 1.5, 2.0, 0.0, 0.0
+    )
+    assert bid_ask_trades == []
