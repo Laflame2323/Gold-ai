@@ -27,7 +27,7 @@ def _validate_pair(bid_candles, ask_candles):
 def _simulate(bid, ask, start, end, horizon, stop_atr, target_r, commission_cost, slippage_cost):
     trades = []
     index = max(start, 56)
-    while index < min(end, len(bid) - 1):
+    while index < min(end - 1, len(bid) - 1):
         setup = _signal(bid, index)
         if setup is None:
             index += 1
