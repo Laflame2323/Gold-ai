@@ -113,3 +113,35 @@ def test_sell_candidate_rejects_non_bearish_breakout_candle():
         "close": 2138.0,
     })
     assert _signal(rows, len(rows) - 1) is None
+
+
+from bid_ask_profitability_research import evaluate_bid_ask_expectancy
+
+
+def test_bid_ask_evaluator_uses_aligned_streams_and_reports_spread():
+    bid = make_candles()
+    ask = [{key: (value + 0.4 if key in ("open", "high", "low", "close") else value)
+            for key, value in row.items()} for row in bid]
+    result = evaluate_bid_ask_expectancy(bid, ask)
+    assert result["status"] == "complete"
+    assert result["execution_model"].startswith("BUY ask-entry/bid-exit")
+    assert result["spread_at_open"]["mean"] == pytest.approx(0.4)
+    assert result["execution_enabled"] is False
+
+
+def test_bid_ask_evaluator_rejects_misaligned_timestamps():
+    bid = make_candles()
+    ask = [{key: (value + 0.4 if key in ("open", "high", "low", "close") else value)
+            for key, value in row.items()} for row in bid]
+    ask[100]["time"] += 1
+    with pytest.raises(ValueError, match="identical timestamps"):
+        evaluate_bid_ask_expectancy(bid, ask)
+
+
+def test_bid_ask_evaluator_rejects_ask_below_bid():
+    bid = make_candles()
+    ask = [{key: (value + 0.4 if key in ("open", "high", "low", "close") else value)
+            for key, value in row.items()} for row in bid]
+    ask[100]["close"] = bid[100]["close"] - 0.1
+    with pytest.raises(ValueError, match="must not be below"):
+        evaluate_bid_ask_expectancy(bid, ask)
