@@ -39,9 +39,13 @@ def test_returns_profitability_metrics_and_no_execution():
     assert "max_drawdown_r" in result["holdout"]
     assert result["execution_enabled"] is False
     assert set(result["directional_breakdown"]["holdout"]) == {"buy", "sell"}
-    for side_metrics in result["directional_breakdown"]["holdout"].values():
+    directional = result["directional_breakdown"]["holdout"]
+    for side_metrics in directional.values():
         assert "expectancy_r" in side_metrics
         assert "profit_factor" in side_metrics
+        assert "max_drawdown_r" in side_metrics
+    assert sum(item["trades"] for item in directional.values()) == result["holdout"]["trades"]
+    assert sum(item["net_r"] for item in directional.values()) == pytest.approx(result["holdout"]["net_r"], abs=0.0002)
 
 
 def test_costs_cannot_improve_trade_returns():
