@@ -122,7 +122,7 @@ def _signal(rows, index, breakout_period=20):
 def _simulate(rows, start, end, horizon, stop_atr, target_r, spread_cost, slippage_cost):
     trades = []
     index = max(start, 56)
-    while index < min(end, len(rows) - 1):
+    while index < min(end - 1, len(rows) - 1):
         setup = _signal(rows, index)
         if setup is None:
             index += 1
