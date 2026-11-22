@@ -512,18 +512,24 @@ $("refreshBtn").addEventListener("click", () => {
 });
 $("chatForm").addEventListener("submit", sendAssistantMessage);
 
-loadGoldPrice();
-loadCandles("M15");
-loadCotPositioning();
-loadMacroContext();
-refreshAllTimeframeMonitor();
-setInterval(loadGoldPrice, 15000);
-setInterval(() => loadCandles(selectedTimeframe), 60000);
-setInterval(refreshAllTimeframeMonitor, 60000);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    loadGoldPrice();
-    loadCandles(selectedTimeframe);
-    refreshAllTimeframeMonitor();
-  }
+function startGoldAIWorkspace() {
+  loadGoldPrice();
+  loadCandles("M15");
+  loadCotPositioning();
+  loadMacroContext();
+  refreshAllTimeframeMonitor();
+  setInterval(loadGoldPrice, 15000);
+  setInterval(() => loadCandles(selectedTimeframe), 60000);
+  setInterval(refreshAllTimeframeMonitor, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      loadGoldPrice();
+      loadCandles(selectedTimeframe);
+      refreshAllTimeframeMonitor();
+    }
+  });
+}
+
+window.GOLD_AI_AUTH_READY.then((session) => {
+  if (session) startGoldAIWorkspace();
 });

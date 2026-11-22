@@ -300,3 +300,26 @@ a { color: inherit; text-decoration: none; }
 .macro-stat small{color:#8290a5;font:8px var(--mono)}
 .macro-note{margin:13px 0 0;color:#a38a5b;font-size:9px;line-height:1.6}
 @media(max-width:600px){.macro-panel{padding:15px}.macro-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.macro-stat{padding:10px 8px}.macro-stat strong{font-size:15px}}
+
+
+/* Owner-only sign-in */
+.login-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 50% 0%,#263348 0%,#0a111d 52%,#070c14 100%)}
+.login-card{width:min(100%,410px);padding:30px;border:1px solid #344158;border-radius:14px;background:#101a29;box-shadow:0 24px 70px #0008}
+.login-brand{display:flex;align-items:center;gap:12px;margin-bottom:32px}
+.login-brand>div{display:flex;flex-direction:column;gap:4px}
+.login-brand strong{color:#f2f5fa;font-size:17px;letter-spacing:1.5px}
+.login-brand strong span{color:#d7b66e}
+.login-brand small{color:#8290a5;font:8px var(--mono);letter-spacing:1.1px}
+.login-card h1{margin:8px 0;color:#f2f5fa;font-size:27px}
+.login-description{margin:0 0 23px;color:#9aa8ba;font-size:12px;line-height:1.6}
+.login-form{display:flex;flex-direction:column;gap:9px}
+.login-form label{margin-top:7px;color:#cbd5e2;font-size:10px;font-weight:600}
+.login-form input{width:100%;min-height:45px;padding:0 12px;border:1px solid #344158;border-radius:7px;outline:none;background:#0b1421;color:#f2f5fa;font:12px Inter,sans-serif}
+.login-form input:focus{border-color:#d7b66e;box-shadow:0 0 0 3px #d7b66e1c}
+.login-message{min-height:30px;margin:8px 0 2px;color:#d7b66e;font-size:10px;line-height:1.5}
+.login-message.error{color:#ff8b8b}
+.login-form .primary-button{width:100%;justify-content:center;min-height:45px;margin-top:3px}
+.login-form .primary-button:disabled{opacity:.65;cursor:wait}
+.login-foot{margin-top:24px;padding-top:15px;border-top:1px solid #28364b;color:#718097;font:8px var(--mono);letter-spacing:.8px;text-align:center}
+.logout-button{border:0;cursor:pointer}
+@media(max-width:480px){.login-screen{padding:16px}.login-card{padding:24px 20px}}
