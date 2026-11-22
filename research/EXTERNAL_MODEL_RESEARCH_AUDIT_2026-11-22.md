@@ -150,3 +150,34 @@ GoldBot describes a gold-specific candle replay engine, market-structure analysi
 - https://github.com/zero-was-here/tradingbot/blob/main/docs/RESULTS.md
 - https://github.com/MarcelNazare/Aurifer
 - https://github.com/shrijeet-lokhande/GoldBot
+
+## Source H — TanvirCCC/algo-trading (deep code and trade-log audit)
+Repository: https://github.com/TanvirCCC/algo-trading
+Reviewed: README, rolling walk-forward script, backtest engine, strategy scanner, ML filter, live signal engine, and published 622-trade CSV. Repository currently advertises 622 OOS trades, 39.4% win rate, +2.13R EV, PF 4.74 and -5.37% max drawdown.
+
+### Independent calculations from the published trade CSV
+- Recounted 622 closed trades: 245 wins, 377 losses, 39.39% win rate.
+- Recomputed arithmetic mean R from the CSV: +2.129R/trade, matching the headline EV.
+- The CSV has 612 shorts and only 10 longs. The 10 long trades total -3.28R; only 2 won. This is not a balanced BUY/SELL system and cannot be adopted as-is for Gold AI.
+- The five largest winning trades contribute about 37.1% of the CSV's total net R. The largest is +194.6R. Removing all trades above +10R leaves 602 trades and reduces average expectancy to about +0.79R. The remaining result is still positive in this file, but the headline is materially tail-dependent and requires trade-level execution verification.
+- The CSV-derived mean winner is about +6.76R and mean loser about -0.88R. The README's EV illustration uses +5.41R average wins and -1R losses; its PF claim (4.74) also differs from the simple R-sum PF calculated from the CSV (~5.00). These may reflect different sizing/metrics versions, but the published artifacts do not reconcile cleanly and should be reproduced before using any headline statistic.
+
+### Critical implementation issues found
+1. **Confirmed same-day daily-bar look-ahead in the published WFV script.** The script builds daily OHLC bars by resampling the complete 5-minute history. For each OOS fold it then selects daily bars with timestamps up to the intraday OOS timestamp. Since a daily bar is timestamped at the start of its day, the daily bias function can read that day's final close, high/low and structure while making a decision earlier in the same day. The OOS call does not set force_neutral_bias=True (that flag is used in the IS grid search), so the OOS result can use future intraday information. This is a blocker: the reported OOS result is not reliable until daily features are shifted/constructed point-in-time and the entire walk-forward run is repeated.
+2. **Ambiguous intrabar exits are resolved using candle colour.** When both stop and target are touched in one 5-minute candle, the engine guesses order from whether the candle closed bullish or bearish. Candle colour does not reveal which level traded first. This can incorrectly turn losses into wins. Gold AI should use tick data or conservatively assume stop-first whenever ordering is unknown.
+3. **Live ML training uses the published OOS trade log.** The live signal engine loads the OOS CSV and fits a new filter on those outcomes for live use. This may be a reasonable later model update only after that data has actually occurred, but it is not the same frozen model that generated the historical OOS trades. The README's description of the model being trained on the 622 OOS trades should not be presented as evidence that the 622 trades themselves were filtered by a model trained only on earlier data.
+4. **The scanner is overwhelmingly short in the published log.** Only 10/622 trades are long. Any claimed general XAUUSD edge needs independent BUY and SELL testing; this result is effectively a short-side result.
+5. **The WFV script selects among parameter variants and risk outcomes on each IS segment.** This is a legitimate adaptive research design in principle, but the number of tried configurations and the full selection process must be logged and included in multiple-testing controls. A walk-forward label alone does not remove selection bias.
+6. **The backtest/live price model needs broker parity checks.** The published engine uses OHLC fills at the signal's entry/stop/target levels and does not show tick-level bid/ask sequencing in the inspected engine. MT4 live execution uses current Ask/Bid, broker stop levels, lot constraints and real order fills. A candle-close result is not equivalent to a broker-executable fill.
+
+### Decision
+**Do not port the signal rules or its headline metrics into Gold AI.** This repository is a useful source of hypotheses (CISD, Asia purge, breaker/IFVG/FVG confluence, London/NY windows, CUSUM regime filter, RF ranking), but its current published performance is blocked by a confirmed point-in-time daily-data leak and ambiguous intrabar ordering. The most valuable lesson is a test case for our own validation engine: automatically detect daily aggregation leakage and prohibit candle-colour guesses for same-bar stop/target sequencing.
+
+### Required re-test if revisited
+- Rebuild daily features from only completed prior-day candles (or shift daily aggregates by one full day before using them intraday).
+- Run all OOS folds again with the corrected point-in-time feature pipeline.
+- Resolve exits with tick-level bid/ask data; if unavailable, stop-first for ambiguous bars.
+- Report long and short separately, and report results with the five largest wins removed as a tail-sensitivity check.
+- Reconcile the trade CSV, README, window summaries, sizing model and PF/expectancy definitions.
+- Freeze the ML model per fold using IS-only data; separately document any later live retraining date and sample.
+- Verify net expectancy after intended broker spread, commission, slippage, swap and rejected/partial fills.
