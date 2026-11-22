@@ -77,29 +77,29 @@ def _indicators(rows, period=14):
     return ema20, ema50, ema200, atr, rsi, adx
 
 
-def _signals(rows, indicators, index):
+def _signals(rows, indicators, index, adx_min=15.0, rsi_min=50.0, rsi_max=80.0, breakout_period=40):
     ema20, ema50, ema200, atr, rsi, adx = indicators
-    if index < 200 or atr[index] is None or atr[index] <= 0:
+    if index < max(200, breakout_period) or atr[index] is None or atr[index] <= 0:
         return False
     if any(series[index] is None for series in (ema20, ema50, ema200, rsi, adx)):
         return False
-    previous_high = max(row["high"] for row in rows[index - 20:index])
+    previous_high = max(row["high"] for row in rows[index - breakout_period:index])
     last = rows[index]
     return (
         last["close"] > ema20[index] > ema50[index]
         and last["close"] > ema200[index]
         and last["close"] > previous_high
-        and adx[index] >= 20.0
-        and 55.0 <= rsi[index] <= 80.0
+        and adx[index] >= adx_min
+        and rsi_min <= rsi[index] <= rsi_max
     )
 
 
 def _simulate(bid, ask, indicators, start, end, horizon, stop_atr,
-              target_r, extra_cost):
+              target_r, extra_cost, adx_min, rsi_min, rsi_max, breakout_period):
     trades = []
     index = max(start, 200)
     while index < min(end - 1, len(bid) - 1):
-        if not _signals(bid, indicators, index):
+        if not _signals(bid, indicators, index, adx_min, rsi_min, rsi_max, breakout_period):
             index += 1
             continue
         entry_index = index + 1
@@ -136,7 +136,8 @@ def _simulate(bid, ask, indicators, start, end, horizon, stop_atr,
 
 
 def evaluate_d1_buy_candidate(
-    bid_candles, ask_candles, horizon=24, stop_atr=2.0, target_r=0.25,
+    bid_candles, ask_candles, horizon=24, stop_atr=2.0, target_r=0.5,
+    adx_min=15.0, rsi_min=50.0, rsi_max=80.0, breakout_period=40,
     commission_cost=0.0, slippage_cost=0.0, holdout_fraction=0.25,
 ):
     """Evaluate the fixed D1 BUY candidate on chronological development/holdout.
@@ -161,11 +162,18 @@ def evaluate_d1_buy_candidate(
 
     indicators = _indicators(bid)
     boundary = int(len(bid) * (1.0 - holdout_fraction))
+    if isinstance(breakout_period, bool) or not isinstance(breakout_period, int) or not 2 <= breakout_period <= 200:
+        raise ValueError("breakout_period must be an integer from 2 to 200.")
+    for name, value in (("adx_min", adx_min), ("rsi_min", rsi_min), ("rsi_max", rsi_max)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 100:
+            raise ValueError(f"{name} must be finite and between 0 and 100.")
+    if rsi_min > rsi_max:
+        raise ValueError("rsi_min must not exceed rsi_max.")
     extra_cost = commission_cost + slippage_cost
     development = _simulate(bid, ask, indicators, 200, boundary - horizon,
-                            horizon, stop_atr, target_r, extra_cost)
+                            horizon, stop_atr, target_r, extra_cost, adx_min, rsi_min, rsi_max, breakout_period)
     holdout = _simulate(bid, ask, indicators, boundary - 1, len(bid),
-                        horizon, stop_atr, target_r, extra_cost)
+                        horizon, stop_atr, target_r, extra_cost, adx_min, rsi_min, rsi_max, breakout_period)
     dev_points = max(0, boundary - horizon - 200)
     test_points = max(0, len(bid) - boundary)
     holdout_metrics = _metrics(holdout, test_points, "chronological_holdout")
@@ -178,9 +186,11 @@ def evaluate_d1_buy_candidate(
     )
     return {
         "status": "complete",
-        "strategy": "D1 BUY: close>EMA20>EMA50, close>EMA200, 20-bar high breakout, ADX14>=20, RSI14 55-80",
+        "strategy": f"D1 BUY: close>EMA20>EMA50, close>EMA200, {breakout_period}-bar high breakout, ADX14>={adx_min}, RSI14 {rsi_min}-{rsi_max}",
         "execution_model": "next-bar ask entry; bid exits; stop-first OHLC handling",
         "parameters": {"horizon": horizon, "stop_atr": stop_atr, "target_r": target_r,
+                       "adx_min": adx_min, "rsi_min": rsi_min, "rsi_max": rsi_max,
+                       "breakout_period": breakout_period,
                        "commission_cost": commission_cost, "slippage_cost": slippage_cost},
         "candle_count": len(bid), "time_split_index": boundary,
         "development": _metrics(development, dev_points, "development"),
