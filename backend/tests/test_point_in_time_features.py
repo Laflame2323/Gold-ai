@@ -20,7 +20,7 @@ def test_daily_bar_becomes_available_only_after_its_close():
     daily = [candle(0, 100), candle(day, 200)]
     lower = [
         candle(day - 5 * 60, 110),
-        candle(day, 120),
+        candle(2 * day - 5 * 60, 120),
     ]
     aligned = align_completed_higher_timeframe(lower, daily, 5 * 60, day)
     assert aligned == [daily[0], daily[1]]
