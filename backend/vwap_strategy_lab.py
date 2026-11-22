@@ -5,64 +5,76 @@ import math
 from datetime import datetime, timezone
 
 
-def _ema(values, period):
+def _ema_series(values, period):
+    out = [None] * len(values)
     if len(values) < period:
-        return None
-    value = sum(values[:period]) / period
+        return out
+    current = sum(values[:period]) / period
+    out[period - 1] = current
     alpha = 2.0 / (period + 1)
-    for item in values[period:]:
-        value += alpha * (item - value)
-    return value
+    for i in range(period, len(values)):
+        current += alpha * (values[i] - current)
+        out[i] = current
+    return out
 
 
-def _rsi(values, period=14):
+def _rsi_series(values, period=14):
+    out = [None] * len(values)
     if len(values) <= period:
-        return None
+        return out
     changes = [values[i] - values[i - 1] for i in range(1, len(values))]
-    gains = [max(x, 0.0) for x in changes]
-    losses = [max(-x, 0.0) for x in changes]
-    gain = sum(gains[:period]) / period
-    loss = sum(losses[:period]) / period
-    for i in range(period, len(changes)):
-        gain = (gain * (period - 1) + gains[i]) / period
-        loss = (loss * (period - 1) + losses[i]) / period
-    if loss == 0:
-        return 100.0 if gain else 50.0
-    return 100.0 - 100.0 / (1.0 + gain / loss)
+    gain = sum(max(x, 0.0) for x in changes[:period]) / period
+    loss = sum(max(-x, 0.0) for x in changes[:period]) / period
+    def value(g, l):
+        if l == 0:
+            return 100.0 if g else 50.0
+        return 100.0 - 100.0 / (1.0 + g / l)
+    out[period] = value(gain, loss)
+    for i in range(period + 1, len(values)):
+        change = changes[i - 1]
+        gain = (gain * (period - 1) + max(change, 0.0)) / period
+        loss = (loss * (period - 1) + max(-change, 0.0)) / period
+        out[i] = value(gain, loss)
+    return out
 
 
-def _atr_adx(candles, period=14):
-    if len(candles) <= period:
-        return None, None
-    trs, plus_dm, minus_dm = [], [], []
-    for i in range(1, len(candles)):
+def _atr_adx_series(candles, period=14):
+    n = len(candles)
+    atrs, adxs = [None] * n, [None] * n
+    trs, plus_dm, minus_dm = [0.0] * n, [0.0] * n, [0.0] * n
+    for i in range(1, n):
         cur, prev = candles[i], candles[i - 1]
-        up = cur["high"] - prev["high"]
-        down = prev["low"] - cur["low"]
-        trs.append(max(cur["high"] - cur["low"],
-                       abs(cur["high"] - prev["close"]),
-                       abs(cur["low"] - prev["close"])))
-        plus_dm.append(up if up > down and up > 0 else 0.0)
-        minus_dm.append(down if down > up and down > 0 else 0.0)
-    atr = sum(trs[:period]) / period
-    p = sum(plus_dm[:period]) / period
-    m = sum(minus_dm[:period]) / period
-    dx = []
-    for i in range(period, len(trs)):
-        atr = (atr * (period - 1) + trs[i]) / period
-        p = (p * (period - 1) + plus_dm[i]) / period
-        m = (m * (period - 1) + minus_dm[i]) / period
-        if atr <= 0:
-            dx.append(0.0)
+        up, down = cur["high"] - prev["high"], prev["low"] - cur["low"]
+        trs[i] = max(cur["high"] - cur["low"],
+                     abs(cur["high"] - prev["close"]),
+                     abs(cur["low"] - prev["close"]))
+        plus_dm[i] = up if up > down and up > 0 else 0.0
+        minus_dm[i] = down if down > up and down > 0 else 0.0
+    if n <= period:
+        return atrs, adxs
+    atr = sum(trs[1:period + 1]) / period
+    plus = sum(plus_dm[1:period + 1]) / period
+    minus = sum(minus_dm[1:period + 1]) / period
+    dx_values = []
+    for i in range(period, n):
+        if i > period:
+            atr = (atr * (period - 1) + trs[i]) / period
+            plus = (plus * (period - 1) + plus_dm[i]) / period
+            minus = (minus * (period - 1) + minus_dm[i]) / period
+        atrs[i] = atr
+        if atr > 0:
+            pdi, mdi = 100 * plus / atr, 100 * minus / atr
+            dx = 100 * abs(pdi - mdi) / (pdi + mdi) if pdi + mdi else 0.0
         else:
-            pdi, mdi = 100 * p / atr, 100 * m / atr
-            dx.append(100 * abs(pdi - mdi) / (pdi + mdi) if pdi + mdi else 0.0)
-    if not dx:
-        return atr, None
-    adx = sum(dx[:period]) / period if len(dx) >= period else sum(dx) / len(dx)
-    for value in dx[period:]:
-        adx = (adx * (period - 1) + value) / period
-    return atr, adx
+            dx = 0.0
+        dx_values.append(dx)
+        if len(dx_values) == period:
+            adx = sum(dx_values) / period
+            adxs[i] = adx
+        elif len(dx_values) > period:
+            adx = (adx * (period - 1) + dx) / period
+            adxs[i] = adx
+    return atrs, adxs
 
 
 def _vwap(candles):
@@ -124,79 +136,95 @@ def run_vwap_strategy_lab(candles, horizon=5, minimum_samples=100,
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
             raise ValueError(f"{name} must be a finite non-negative number")
     rows = _validate(candles)
-    if len(rows) < 201 + minimum_samples + horizon:
+    required = 201 + minimum_samples + horizon
+    if len(rows) < required:
         return {"status": "insufficient_data", "candle_count": len(rows),
-                "required_candle_count": 201 + minimum_samples + horizon,
+                "required_candle_count": required,
                 "read_only": True, "execution_enabled": False}
     if any(row["volume"] is None for row in rows):
         return {"status": "volume_unavailable", "candle_count": len(rows),
                 "message": "VWAP was not calculated because one or more candles lack volume.",
                 "read_only": True, "execution_enabled": False}
-    closes = [r["close"] for r in rows]
     vwap = _vwap(rows)
     if vwap is None or not any(x is not None for x in vwap):
         return {"status": "volume_unavailable", "message": "No positive cumulative volume is available.",
                 "read_only": True, "execution_enabled": False}
 
+    closes = [r["close"] for r in rows]
+    ema50, ema200 = _ema_series(closes, 50), _ema_series(closes, 200)
+    rsi = _rsi_series(closes)
+    atr, adx = _atr_adx_series(rows)
     trades = []
-    start = 200
-    for i in range(start, len(rows) - horizon):
-        prefix = rows[:i + 1]
-        ema50, ema200 = _ema(closes[:i + 1], 50), _ema(closes[:i + 1], 200)
-        rsi = _rsi(closes[:i + 1])
-        atr, adx = _atr_adx(prefix)
-        if None in (ema50, ema200, rsi, atr, adx) or vwap[i] is None or atr <= 0:
+    for i in range(200, len(rows) - horizon):
+        if any(series[i] is None for series in (ema50, ema200, rsi, atr, adx)) or vwap[i] is None or atr[i] <= 0:
             continue
         signal = "WAIT"
-        if closes[i] > vwap[i] and ema50 > ema200 and rsi >= 50 and rsi <= 70 and adx >= adx_threshold:
+        if closes[i] > vwap[i] and ema50[i] > ema200[i] and 50 <= rsi[i] <= 70 and adx[i] >= adx_threshold:
             signal = "BUY"
-        elif closes[i] < vwap[i] and ema50 < ema200 and rsi <= 50 and rsi >= 30 and adx >= adx_threshold:
+        elif closes[i] < vwap[i] and ema50[i] < ema200[i] and 30 <= rsi[i] <= 50 and adx[i] >= adx_threshold:
             signal = "SELL"
         if signal == "WAIT":
             continue
         entry_i = i + 1
         entry = rows[entry_i]["open"]
-        stop = entry - stop_atr * atr if signal == "BUY" else entry + stop_atr * atr
-        exit_i, exit_price, exit_reason = min(i + horizon, len(rows) - 1), rows[min(i + horizon, len(rows) - 1)]["close"], "time"
-        for j in range(entry_i, min(i + horizon, len(rows) - 1) + 1):
+        stop = entry - stop_atr * atr[i] if signal == "BUY" else entry + stop_atr * atr[i]
+        exit_i = i + horizon
+        exit_price, exit_reason = rows[exit_i]["close"], "time"
+        for j in range(entry_i, exit_i + 1):
             hit = rows[j]["low"] <= stop if signal == "BUY" else rows[j]["high"] >= stop
             if hit:
-                # Model adverse gaps through the stop instead of granting a
-                # fill at a price the market may have skipped.
-                gap_fill = min(stop, rows[j]["open"]) if signal == "BUY" else max(stop, rows[j]["open"])
-                exit_i, exit_price, exit_reason = j, gap_fill, "atr_stop"
+                # Adverse gaps through the stop are filled at the open, not the skipped stop price.
+                exit_price = min(stop, rows[j]["open"]) if signal == "BUY" else max(stop, rows[j]["open"])
+                exit_i, exit_reason = j, "atr_stop"
                 break
         gross = (exit_price - entry) if signal == "BUY" else (entry - exit_price)
         net = gross - spread_price - 2.0 * slippage_price
-        trades.append({"signal": signal, "entry_time": rows[entry_i]["time"],
-                       "exit_time": rows[exit_i]["time"], "entry_price": entry,
-                       "exit_price": exit_price, "exit_reason": exit_reason,
-                       "net_price_pnl": net, "win": net > 0})
-    wins = sum(t["win"] for t in trades)
-    pnls = [t["net_price_pnl"] for t in trades]
-    gains = sum(x for x in pnls if x > 0)
-    losses = -sum(x for x in pnls if x < 0)
-    def side(name):
-        subset = [t for t in trades if t["signal"] == name]
-        return {"trades": len(subset), "win_rate_pct": round(100 * sum(t["win"] for t in subset) / len(subset), 2) if subset else None,
-                "average_net_price_pnl": round(sum(t["net_price_pnl"] for t in subset) / len(subset), 5) if subset else None}
+        trades.append({"signal": signal, "decision_index": i,
+                       "entry_time": rows[entry_i]["time"], "exit_time": rows[exit_i]["time"],
+                       "entry_price": entry, "exit_price": exit_price,
+                       "exit_reason": exit_reason, "net_price_pnl": net, "win": net > 0})
+
+    def summarize(subset):
+        pnls = [t["net_price_pnl"] for t in subset]
+        wins = sum(t["win"] for t in subset)
+        gross_win = sum(x for x in pnls if x > 0)
+        gross_loss = -sum(x for x in pnls if x < 0)
+        equity = peak = max_drawdown = 0.0
+        for pnl in pnls:
+            equity += pnl
+            peak = max(peak, equity)
+            max_drawdown = max(max_drawdown, peak - equity)
+        return {
+            "trades": len(subset),
+            "win_rate_pct": round(100 * wins / len(subset), 2) if subset else None,
+            "average_net_price_pnl": round(sum(pnls) / len(pnls), 5) if subset else None,
+            "profit_factor": round(gross_win / gross_loss, 3) if gross_loss else (None if not gross_win else "infinite"),
+            "max_drawdown_price": round(max_drawdown, 5),
+        }
+
+    buys = [t for t in trades if t["signal"] == "BUY"]
+    sells = [t for t in trades if t["signal"] == "SELL"]
+    independent, next_allowed = [], 200
+    for trade in trades:
+        if trade["decision_index"] >= next_allowed:
+            independent.append(trade)
+            next_allowed = trade["decision_index"] + horizon
     return {
         "status": "complete", "strategy": "VWAP + EMA50/EMA200 + RSI14 + ADX14; ATR stop",
         "candle_count": len(rows), "signals_tested": len(trades),
-        "buy": side("BUY"), "sell": side("SELL"),
-        "win_rate_pct": round(100 * wins / len(trades), 2) if trades else None,
-        "average_net_price_pnl": round(sum(pnls) / len(pnls), 5) if pnls else None,
-        "profit_factor": round(gains / losses, 3) if losses else (None if not gains else "infinite"),
+        **summarize(trades), "buy": summarize(buys), "sell": summarize(sells),
+        "non_overlapping_check": summarize(independent),
         "volume_kind": volume_kind, "vwap_session_timezone": "UTC",
         "cost_assumptions": {"spread_price_round_trip": spread_price,
                              "slippage_price_per_side": slippage_price},
-        "stop_rule": f"{stop_atr} x ATR(14); stop checked before time exit",
+        "stop_rule": f"{stop_atr} x ATR(14); adverse gap fills modelled; stop checked before time exit",
         "horizon_candles": horizon, "trades": trades,
         "limitations": ["Research-only; no orders are placed.",
                         "MT5 candle volume is tick volume, not exchange-traded volume.",
                         "OHLC stop simulation cannot reconstruct intrabar price path.",
                         "Spread/slippage inputs are user-supplied assumptions; defaults are zero.",
                         "No commission, swap, latency or broker execution simulation.",
+                        "Drawdown is in price units, not account-currency or percentage equity.",
                         "Historical performance does not guarantee future results."],
         "read_only": True, "execution_enabled": False,
     }
