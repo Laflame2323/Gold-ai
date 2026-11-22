@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from urllib.request import Request
-from analysis_engine import analyse_timeframes
+from analysis_engine import analyse_timeframes, _analyse_one_timeframe
 from market_data import MarketDataError, _fetch_json_with_retries, get_market_candles, get_daily_history, get_intraday_prices
 from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run, get_latest_mt5_source, get_mt5_market_candles, MarketStorageError
 from cot_data import COTDataError, get_gold_cot
@@ -49,6 +49,94 @@ def home():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.get("/analyse/m15")
+def analyse_m15():
+    """Analyse only the latest internet-sourced M15 gold chart; never fall back to archived MT5 candles."""
+    try:
+        market = get_market_candles("M15")
+    except MarketDataError as exc:
+        raise HTTPException(status_code=503, detail=f"M15 reference-market data unavailable: {exc}")
+
+    result = _analyse_one_timeframe("M15", market)
+    latest_price = result.get("close")
+    atr = result.get("atr14")
+    rsi = result.get("rsi14")
+    score = result.get("score", 0)
+    fresh = market.get("data_status") == "recent"
+    enough_history = result.get("candle_count", 0) >= 60
+
+    # A completed but old chart must never become a current setup.
+    signal = "WAIT"
+    reason = []
+    if not fresh:
+        reason.append("The latest M15 chart is stale; wait for the market to reopen and fresh prices.")
+    if not enough_history:
+        reason.append("At least 60 M15 observations are required.")
+    if fresh and enough_history and latest_price is not None and atr and atr > 0:
+        if score >= 3 and rsi is not None and 50 <= rsi <= 68:
+            signal = "BUY"
+        elif score <= -3 and rsi is not None and 32 <= rsi <= 50:
+            signal = "SELL"
+        else:
+            reason.append("M15 indicators do not meet the directional confirmation threshold.")
+
+    setup = None
+    if signal in ("BUY", "SELL"):
+        risk_distance = round(atr * 1.0, 2)
+        reward_distance = round(atr * 1.25, 2)
+        if signal == "BUY":
+            stop_loss = round(latest_price - risk_distance, 2)
+            take_profit = round(latest_price + reward_distance, 2)
+        else:
+            stop_loss = round(latest_price + risk_distance, 2)
+            take_profit = round(latest_price - reward_distance, 2)
+        setup = {
+            "direction": signal,
+            "entry_reference": latest_price,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "risk_reward": "1:1.25",
+            "valid_for_minutes": 15,
+            "note": "Research-only reference-price setup. Confirm spread and execution price with your broker.",
+        }
+
+    return {
+        "symbol": market.get("symbol", "XAUUSD"),
+        "timeframe": "M15",
+        "horizon_minutes": 15,
+        "signal": signal,
+        "setup": setup,
+        "analysis_status": "complete" if fresh and enough_history else "data_not_ready",
+        "model_type": "m15_rule_based_research",
+        "ai_trained": False,
+        "research_only": True,
+        "execution_enabled": False,
+        "data_source": market.get("source"),
+        "provider_source": market.get("provider_source"),
+        "last_candle_at": market.get("last_candle_at"),
+        "age_seconds": market.get("age_seconds"),
+        "data_status": market.get("data_status"),
+        "latest_price": latest_price,
+        "indicators": {
+            "score": score,
+            "bias": result.get("bias"),
+            "ema20": result.get("ema20"),
+            "ema50": result.get("ema50"),
+            "rsi14": rsi,
+            "macd_histogram": result.get("macd_histogram"),
+            "atr14": atr,
+            "market_structure": result.get("market_structure"),
+        },
+        "reason": reason or [result.get("reason", "M15 setup generated from current reference chart.")],
+        "message": (
+            "Gold AI generated an M15-only research setup from the internet reference chart."
+            if setup else
+            "Gold AI is standing aside because the M15 chart is stale or the setup conditions are not strong enough."
+        ),
+        "warning": market.get("warning"),
+    }
 
 
 @app.get("/analyse")
