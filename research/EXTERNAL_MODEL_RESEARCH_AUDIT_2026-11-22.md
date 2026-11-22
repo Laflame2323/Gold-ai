@@ -181,3 +181,24 @@ Reviewed: README, rolling walk-forward script, backtest engine, strategy scanner
 - Reconcile the trade CSV, README, window summaries, sizing model and PF/expectancy definitions.
 - Freeze the ML model per fold using IS-only data; separately document any later live retraining date and sample.
 - Verify net expectancy after intended broker spread, commission, slippage, swap and rejected/partial fills.
+
+## Source I — Alikhabazian0/Gold-Market-Regime-Classification
+Repository: https://github.com/Alikhabazian0/Gold-Market-Regime-Classification
+Design: XAUUSD H1 regime classification using macroeconomic features (VIX, DXY, Treasury/TIPS yields, breakeven inflation), engineered price/return/technical features, tree models and a temporal convolutional network (TCN). Phase II uses 35,116 hourly observations from Jan 2020–Dec 2025 and expanding walk-forward tests.
+
+### Reported results
+- TCN average walk-forward Macro F1: 0.3144; Weighted F1: 0.3243.
+- Fold Macro F1: 0.3389 (2023), 0.2659 (2024), 0.3384 (2025), showing year-to-year instability.
+- The simple regime-following backtest (long on Up, short on Down, flat on Range; 8-hour hold) lost 24.61%, with PF 0.8219, Sharpe -1.97 and max drawdown -29.64%.
+- Transfer learning from Silver and DXY did not outperform direct XAUUSD training.
+
+### Decision
+Do not import the TCN or its regime classifier as a trade-entry signal. The repository itself demonstrates that moderate classification scores do not automatically create a profitable strategy; its reported simple strategy loses money. The useful idea is to test macroeconomic and volatility regime features as a context/risk filter, not as a BUY/SELL predictor. Any Gold AI experiment must compare against a no-regime baseline and demonstrate improvement in net expectancy, drawdown and stability on the same untouched holdout.
+
+### Important caution
+README metrics are author-reported and have not been independently reproduced from the included notebook/data. Macro F1 is not a trade win rate and should never be displayed as Gold AI's profitable prediction rate.
+
+## Research conclusion after Sources H and I
+- The very high-return external ICT system is not safe to copy: its published OOS pipeline contains same-day daily-data leakage and ambiguous intrabar exit assumptions.
+- The gold regime-classification system has modest walk-forward classification scores and a losing simple trading backtest; macro features remain a research hypothesis only.
+- The next implementation priority for Gold AI is not another indicator or neural network. It is a point-in-time data guard and conservative bid/ask execution engine, followed by controlled testing of one candidate strategy at a time.
