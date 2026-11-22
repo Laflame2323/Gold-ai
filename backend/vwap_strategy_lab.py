@@ -161,7 +161,10 @@ def run_vwap_strategy_lab(candles, horizon=5, minimum_samples=100,
         for j in range(entry_i, min(i + horizon, len(rows) - 1) + 1):
             hit = rows[j]["low"] <= stop if signal == "BUY" else rows[j]["high"] >= stop
             if hit:
-                exit_i, exit_price, exit_reason = j, stop, "atr_stop"
+                # Model adverse gaps through the stop instead of granting a
+                # fill at a price the market may have skipped.
+                gap_fill = min(stop, rows[j]["open"]) if signal == "BUY" else max(stop, rows[j]["open"])
+                exit_i, exit_price, exit_reason = j, gap_fill, "atr_stop"
                 break
         gross = (exit_price - entry) if signal == "BUY" else (entry - exit_price)
         net = gross - spread_price - 2.0 * slippage_price
