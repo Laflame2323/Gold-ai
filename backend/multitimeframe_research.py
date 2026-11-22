@@ -203,6 +203,18 @@ def evaluate_multitimeframe_research(candles_by_timeframe, horizon=5, min_move_p
         decision_indices.append(index)
 
     candle_count = len(base)
+    if not decision_indices:
+        return {
+            "status": "insufficient_data",
+            "candle_count": candle_count,
+            "eligible_samples": 0,
+            "excluded_small_move_outcomes": excluded,
+            "minimum_samples_per_split": MIN_ROWS_PER_SPLIT,
+            "ai_trained": False,
+            "feature_alignment": aligned["alignment_rule"],
+            "message": "No eligible labelled samples remain after timeframe alignment and outcome filtering.",
+        }
+
     # Chronological splits are based on the time range with complete,
     # leakage-safe MTF features. The full H1 history can be much older than
     # the shortest timeframe archive.

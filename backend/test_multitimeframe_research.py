@@ -39,6 +39,12 @@ class MultiTimeframeResearchTests(unittest.TestCase):
         self.assertFalse(result["ai_trained"])
         self.assertFalse(result["execution_enabled"])
 
+    def test_no_labelled_samples_returns_insufficient_data(self):
+        result = evaluate_multitimeframe_research(history(), min_move_pct=10.0)
+        self.assertEqual(result["status"], "insufficient_data")
+        self.assertEqual(result["eligible_samples"], 0)
+        self.assertFalse(result["ai_trained"])
+
     def test_insufficient_h1_history_is_reported(self):
         data = history()
         data["H1"] = data["H1"][:500]

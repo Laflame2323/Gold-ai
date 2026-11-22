@@ -7,7 +7,7 @@ This module builds features only; it does not train or persist a model.
 from __future__ import annotations
 
 import math
-from bisect import bisect_right
+from point_in_time_features import align_completed_higher_timeframe
 
 
 TIMEFRAME_SECONDS = {
@@ -135,15 +135,24 @@ def build_multitimeframe_features(
         timeframe: _validate_candles(candles_by_timeframe[timeframe], timeframe)
         for timeframe in selected
     }
-    close_times = {
-        timeframe: [candle["time"] + TIMEFRAME_SECONDS[timeframe]
-                    for candle in candles]
+    base_interval = TIMEFRAME_SECONDS[base_timeframe]
+    # Use one shared point-in-time alignment rule across the research engine.
+    # Each base decision is made only after its candle has closed.
+    aligned_candles = {
+        timeframe: align_completed_higher_timeframe(
+            cleaned[base_timeframe], cleaned[timeframe],
+            TIMEFRAME_SECONDS[base_timeframe], TIMEFRAME_SECONDS[timeframe],
+        )
+        for timeframe in selected
+    }
+    index_by_time = {
+        timeframe: {candle["time"]: index
+                    for index, candle in enumerate(candles)}
         for timeframe, candles in cleaned.items()
     }
     names = _feature_names(selected)
     rows = []
     feature_cache = {timeframe: {} for timeframe in selected}
-    base_interval = TIMEFRAME_SECONDS[base_timeframe]
 
     for base_index, base_candle in enumerate(cleaned[base_timeframe]):
         decision_time = base_candle["time"] + base_interval
@@ -151,11 +160,15 @@ def build_multitimeframe_features(
         source_times = {}
         ready = True
         for timeframe in selected:
-            source_index = bisect_right(close_times[timeframe], decision_time) - 1
+            source_candle = aligned_candles[timeframe][base_index]
+            if source_candle is None:
+                ready = False
+                break
+            source_index = index_by_time[timeframe][source_candle["time"]]
             if source_index < 30:
                 ready = False
                 break
-            source_close_time = close_times[timeframe][source_index]
+            source_close_time = source_candle["time"] + TIMEFRAME_SECONDS[timeframe]
             # Reject stale data gaps; the latest completed source candle must
             # be no more than one source interval behind the decision time.
             if decision_time - source_close_time >= TIMEFRAME_SECONDS[timeframe]:
