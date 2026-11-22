@@ -41,7 +41,9 @@ def test_d1_candidate_reports_research_only_metrics():
     assert result["execution_enabled"] is False
     assert result["ai_trained"] is False
     assert result["parameters"]["stop_atr"] == 2.0
-    assert result["parameters"]["target_r"] == 0.25
+    assert result["parameters"]["target_r"] == 0.5
+    assert result["parameters"]["breakout_period"] == 40
+    assert result["parameters"]["adx_min"] == 15.0
     assert "win_rate_pct" in result["holdout"]
     assert "expectancy_r" in result["holdout"]
     assert "profit_factor" in result["holdout"]
@@ -62,3 +64,12 @@ def test_d1_candidate_rejects_negative_costs():
     bid = candles()
     with pytest.raises(ValueError, match="non-negative"):
         evaluate_d1_buy_candidate(bid, ask_from(bid), commission_cost=-0.01)
+
+
+
+def test_d1_candidate_rejects_invalid_filter_ranges():
+    bid = candles()
+    with pytest.raises(ValueError, match="rsi_min must not exceed"):
+        evaluate_d1_buy_candidate(bid, ask_from(bid), rsi_min=85, rsi_max=80)
+    with pytest.raises(ValueError, match="breakout_period"):
+        evaluate_d1_buy_candidate(bid, ask_from(bid), breakout_period=201)
