@@ -1,0 +1,45 @@
+name: Research model tests
+
+on:
+  push:
+    branches:
+      - research/multitimeframe-feature-builder
+  pull_request:
+    branches:
+      - research/multitimeframe-feature-builder
+
+jobs:
+  test-gradient-boosting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run gradient boosting research tests
+        working-directory: backend
+        run: python -m unittest -v test_gradient_boosting_research
+      - name: Run profit-aware meta-model tests
+        working-directory: backend
+        run: python -m unittest -v test_profit_aware_research
+      - name: Download audited public XAUUSD M1 sample
+        run: |
+          mkdir -p data/getdata
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://raw.githubusercontent.com/getdata-finance/xauusd-1m-ohlcv-metals-historical-data/main/XAUUSD_1m.csv \
+            --output data/getdata/XAUUSD_1m.csv
+      - name: Evaluate chronological M30 and H1 candidates
+        run: |
+          python backend/getdata_research_evaluation.py \
+            --input data/getdata/XAUUSD_1m.csv \
+            --output data/getdata/research_evaluation.json
+      - name: Preserve research evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-ai-getdata-research-evaluation
+          path: data/getdata/
+          retention-days: 14

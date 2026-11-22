@@ -181,6 +181,54 @@
         </section>
       </div>
 
+
+      <section class="panel research-panel" id="training-lab">
+        <div class="panel-heading">
+          <div><p class="eyebrow">MODEL DEVELOPMENT · HISTORICAL DATA</p><h2>AI research &amp; training</h2></div>
+          <span class="small-tag">RESEARCH ONLY</span>
+        </div>
+        <div class="research-intro">
+          <div><strong>Multi-timeframe model evaluation</strong><p>Train an experimental candidate on earlier candles, select settings on validation data, then score a later untouched test period.</p></div>
+          <button class="primary-button research-run-button" id="runResearchBtn" type="button"><span>✳</span> Run evaluation <b>→</b></button>
+        </div>
+        <div class="research-state" id="researchState" aria-live="polite">No evaluation has been run from this dashboard yet.</div>
+        <div class="research-metrics" id="researchMetrics">
+          <div><span>UNTOUCHED TEST ACCURACY</span><strong id="researchTestAccuracy">—</strong><small id="researchTestSamples">Waiting for evaluation</small></div>
+          <div><span>BALANCED ACCURACY</span><strong id="researchBalancedAccuracy">—</strong><small>Equal weight to up and down classes</small></div>
+          <div><span>MAJORITY BASELINE</span><strong id="researchBaseline">—</strong><small id="researchBaselineGap">Comparison benchmark</small></div>
+          <div><span>ELIGIBLE SAMPLES</span><strong id="researchSamples">—</strong><small id="researchSplits">Train / validation / test</small></div>
+        </div>
+        <section id="researchConfidenceCoverage" aria-label="Confidence threshold performance" style="margin:18px 0;padding:18px;border:1px solid rgba(148,163,184,.18);border-radius:14px;background:rgba(15,23,42,.42);">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+            <strong style="font-size:12px;letter-spacing:.08em;">CONFIDENCE THRESHOLD ANALYSIS</strong>
+            <small style="color:var(--muted,#94a3b8);font-size:11px;">Unseen test setups · higher threshold means fewer accepted signals</small>
+          </div>
+          <div style="overflow-x:auto;">
+            <table id="researchConfidenceTable" style="width:100%;border-collapse:collapse;min-width:480px;font-size:12px;text-align:left;">
+              <thead><tr>
+                <th style="padding:10px 8px;border-bottom:1px solid rgba(148,163,184,.22);color:var(--muted,#94a3b8);font-size:10px;">MINIMUM MODEL SCORE</th>
+                <th style="padding:10px 8px;border-bottom:1px solid rgba(148,163,184,.22);color:var(--muted,#94a3b8);font-size:10px;">ACCEPTED SETUPS</th>
+                <th style="padding:10px 8px;border-bottom:1px solid rgba(148,163,184,.22);color:var(--muted,#94a3b8);font-size:10px;">TEST COVERAGE</th>
+                <th style="padding:10px 8px;border-bottom:1px solid rgba(148,163,184,.22);color:var(--muted,#94a3b8);font-size:10px;">WIN RATE</th>
+              </tr></thead>
+              <tbody><tr><td colspan="4" style="padding:12px 8px;color:var(--muted,#94a3b8);">Run the SMC evaluation to load threshold results.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+        <div class="research-report" id="researchReport">
+          <div><span>SELECTED TIMEFRAMES</span><strong id="researchTimeframes">—</strong></div>
+          <div><span>MODEL STATUS</span><strong id="researchModelStatus">Not trained</strong></div>
+          <div><span>DATA SOURCE</span><strong id="researchSource">Authenticated MT5 archive required</strong></div>
+          <div><span>TEST PERIOD</span><strong id="researchTestStatus">Not evaluated</strong></div>
+          <div><span>TRAINING ACCURACY</span><strong id="researchTrainAccuracy">—</strong></div>
+          <div><span>VALIDATION ACCURACY</span><strong id="researchValidationAccuracy">—</strong></div>
+          <div><span>WALK-FORWARD MEAN</span><strong id="researchWalkForward">—</strong></div>
+        </div>
+        <div class="history-heading"><strong>Recent evaluation history</strong><span>Saved on this device</span></div>
+        <div class="research-history" id="researchHistory"><p>No saved evaluations yet. Results will appear here after your first run.</p></div>
+        <p class="research-disclaimer">Important: this is a research candidate, not a deployed or live AI model. Accuracy is historical, not a prediction of future performance. No spread, commission, slippage or swap costs are included. No trades are placed.</p>
+      </section>
+
       <section class="lower-grid">
         <section class="panel data-panel">
           <div class="panel-heading"><div><p class="eyebrow">FEED INFORMATION</p><h2>Market data status</h2></div><span class="small-tag">READ ONLY</span></div>
@@ -219,5 +267,6 @@
 
   <script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
   <script src="app.js"></script>
+  <script src="smc-research.js"></script>
 </body>
 </html>

@@ -1,0 +1,182 @@
+name: Historical XAUUSD long-range acquisition
+
+on:
+  push:
+    branches:
+      - research/multitimeframe-feature-builder
+    paths:
+      - .github/workflows/historical-data-pilot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acquire-normalize-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install data tools
+        run: pip install -r backend/requirements.txt pandas pyarrow
+      - name: Download annual HistData XAUUSD M1 files
+        run: |
+          set -euo pipefail
+          mkdir -p data/histdata_raw
+          for year in {2009..2025}; do
+            file="DAT_MT_XAUUSD_M1_${year}.csv"
+            url="https://huggingface.co/datasets/fokan/xauusd-2009-2026/resolve/main/${file}?download=true"
+            curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 "${url}" -o "data/histdata_raw/${file}"
+            test -s "data/histdata_raw/${file}"
+          done
+          file="DAT_MT_XAUUSD_M1_202601.csv"
+          url="https://huggingface.co/datasets/fokan/xauusd-2009-2026/resolve/main/${file}?download=true"
+          curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 300 "${url}" -o "data/histdata_raw/${file}"
+          test -s "data/histdata_raw/${file}"
+      - name: Normalize fixed-EST timestamps to UTC and audit data
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          import pandas as pd
+
+          raw_dir = Path("data/histdata_raw")
+          out_dir = Path("data/histdata_normalized")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          all_frames = []
+          manifest = {
+              "source": "HistData XAUUSD M1 files mirrored at Hugging Face dataset fokan/xauusd-2009-2026",
+              "source_timezone": "EST fixed UTC-5, no daylight-saving adjustment (HistData FAQ)",
+              "normalized_timezone": "UTC",
+              "price_basis": "bid OHLC",
+              "volume": "source volume field is zero/unavailable; excluded",
+              "exness_data_used": False,
+              "research_only": True,
+              "production_model_persisted": False,
+              "execution_enabled": False,
+              "files": [],
+              "duplicate_policy": "identical duplicate bars deduplicated; conflicting timestamp groups excluded and reported"
+          }
+
+          for path in sorted(raw_dir.glob("*.csv")):
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              raw = pd.read_csv(path, header=None, dtype=str)
+              if raw.shape[1] != 7:
+                  raise ValueError(f"{path.name}: expected 7 columns (date,time,OHLC,volume), got {raw.shape[1]}")
+              raw.columns = ["date", "time", "open", "high", "low", "close", "source_volume"]
+              ts_naive = pd.to_datetime(raw["date"] + " " + raw["time"], format="%Y.%m.%d %H:%M", errors="coerce")
+              if ts_naive.isna().any():
+                  raise ValueError(f"{path.name}: invalid timestamps: {int(ts_naive.isna().sum())}")
+              ts_utc = ts_naive.dt.tz_localize("Etc/GMT+5").dt.tz_convert("UTC")
+              frame = pd.DataFrame({
+                  "timestamp": ts_utc,
+                  "open": pd.to_numeric(raw["open"], errors="coerce"),
+                  "high": pd.to_numeric(raw["high"], errors="coerce"),
+                  "low": pd.to_numeric(raw["low"], errors="coerce"),
+                  "close": pd.to_numeric(raw["close"], errors="coerce"),
+              })
+              if frame[["open","high","low","close"]].isna().any().any():
+                  raise ValueError(f"{path.name}: nonnumeric OHLC")
+              if (frame[["open","high","low","close"]] <= 0).any().any():
+                  raise ValueError(f"{path.name}: nonpositive OHLC")
+              valid = (
+                  (frame["low"] <= frame["open"]) &
+                  (frame["low"] <= frame["close"]) &
+                  (frame["high"] >= frame["open"]) &
+                  (frame["high"] >= frame["close"]) &
+                  (frame["low"] <= frame["high"])
+              )
+              if not valid.all():
+                  raise ValueError(f"{path.name}: {int((~valid).sum())} invalid OHLC rows")
+              dup_mask = frame["timestamp"].duplicated(keep=False)
+              dup_rows = frame.loc[dup_mask].sort_values("timestamp")
+              conflict_times = []
+              exact_duplicate_rows_removed = 0
+              if not dup_rows.empty:
+                  nunique = dup_rows.groupby("timestamp")[["open","high","low","close"]].nunique()
+                  conflict_times = nunique.index[(nunique > 1).any(axis=1)].tolist()
+                  dup_rows.to_csv(out_dir / f"duplicates_{path.stem}.csv", index=False)
+                  conflict_mask = frame["timestamp"].isin(conflict_times)
+                  conflict_rows = int(conflict_mask.sum())
+                  safe = frame.loc[~conflict_mask]
+                  before = len(safe)
+                  safe = safe.drop_duplicates(subset=["timestamp"], keep="first")
+                  exact_duplicate_rows_removed = before - len(safe)
+                  frame = pd.concat([safe, frame.loc[conflict_mask].iloc[0:0]], ignore_index=True)
+              if not frame["timestamp"].is_monotonic_increasing:
+                  frame = frame.sort_values("timestamp").reset_index(drop=True)
+              diffs = frame["timestamp"].diff().dropna().dt.total_seconds().div(60)
+              row = {
+                  "file": path.name,
+                  "rows_raw": int(len(raw)),
+                  "rows_usable": int(len(frame)),
+                  "first_utc": frame["timestamp"].iloc[0].isoformat(),
+                  "last_utc": frame["timestamp"].iloc[-1].isoformat(),
+                  "sha256": digest,
+                  "duplicate_rows_detected": int(dup_mask.sum()),
+                  "exact_duplicate_rows_removed": int(exact_duplicate_rows_removed),
+                  "conflicting_duplicate_timestamps_excluded": int(len(conflict_times)),
+                  "invalid_ohlc_rows": int((~valid).sum()),
+                  "gaps_over_1m": int((diffs > 1).sum()),
+                  "max_gap_minutes": float(diffs.max()) if len(diffs) else 0,
+                  "median_interval_minutes": float(diffs.median()) if len(diffs) else 0,
+                  "source_volume_nonzero_rows": int((pd.to_numeric(raw["source_volume"], errors="coerce").fillna(0) != 0).sum())
+              }
+              manifest["files"].append(row)
+              all_frames.append(frame)
+              print(json.dumps(row))
+          combined = pd.concat(all_frames, ignore_index=True).sort_values("timestamp")
+          cross_dup = combined["timestamp"].duplicated(keep=False)
+          cross_conflict_times = []
+          if cross_dup.any():
+              duplicate_rows = combined.loc[cross_dup]
+              nunique = duplicate_rows.groupby("timestamp")[["open","high","low","close"]].nunique()
+              cross_conflict_times = nunique.index[(nunique > 1).any(axis=1)].tolist()
+              duplicate_rows.to_csv(out_dir / "cross_file_duplicates.csv", index=False)
+              combined = combined.loc[~combined["timestamp"].isin(cross_conflict_times)]
+              combined = combined.drop_duplicates(subset=["timestamp"], keep="first")
+          combined = combined.sort_values("timestamp").reset_index(drop=True)
+          combined.to_parquet(out_dir / "xauusd_histdata_m1_utc.parquet", index=False, compression="zstd")
+          manifest["total_rows"] = int(len(combined))
+          manifest["first_utc"] = combined["timestamp"].iloc[0].isoformat()
+          manifest["last_utc"] = combined["timestamp"].iloc[-1].isoformat()
+          manifest["cross_file_duplicate_rows_detected"] = int(cross_dup.sum())
+          manifest["cross_file_conflicting_timestamps_excluded"] = int(len(cross_conflict_times))
+          manifest["combined_duplicate_timestamps"] = int(combined["timestamp"].duplicated().sum())
+          (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+          print(json.dumps({k:v for k,v in manifest.items() if k != "files"}, indent=2))
+          PY
+      - name: Train and evaluate research candidates on independent historical data
+        run: |
+          python backend/histdata_research_evaluation.py \
+            --input data/histdata_normalized/xauusd_histdata_m1_utc.parquet \
+            --output data/histdata_normalized/research_evaluation.json \
+            --candidate-model-output data/histdata_normalized/candidate_placeholder.joblib
+      - name: Download separate 2026 external XAUUSD sample
+        run: |
+          set -euo pipefail
+          mkdir -p data/getdata_external
+          curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            "https://raw.githubusercontent.com/getdata-finance/xauusd-1m-ohlcv-metals-historical-data/main/XAUUSD_1m.csv" \
+            -o data/getdata_external/XAUUSD_1m.csv
+          test -s data/getdata_external/XAUUSD_1m.csv
+      - name: Score saved HistData candidates on external data without refitting
+        run: |
+          set -euo pipefail
+          for timeframe in m30 h1; do
+            python backend/saved_candidate_external_evaluation.py \
+              --input data/getdata_external/XAUUSD_1m.csv \
+              --candidate-model "data/histdata_normalized/gold_ai_${timeframe}_histdata_candidate.joblib" \
+              --output "data/histdata_normalized/getdata_external_${timeframe}_evaluation.json"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gold-ai-histdata-xauusd-m1-utc-2009-2026jan
+          path: |
+            data/histdata_normalized/
+            data/histdata_raw/*.csv
+          retention-days: 30

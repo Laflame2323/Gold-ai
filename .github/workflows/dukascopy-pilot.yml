@@ -1,0 +1,45 @@
+name: Dukascopy XAUUSD historical pilot
+
+on:
+  push:
+    branches:
+      - research/multitimeframe-feature-builder
+    paths:
+      - ".github/workflows/dukascopy-pilot.yml"
+      - "backend/dukascopy_data.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  download-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download two completed UTC days of XAUUSD M1 BID/ASK
+        run: |
+          python backend/dukascopy_data.py \
+            --start 2026-11-16 \
+            --end 2026-11-18 \
+            --output-dir data/dukascopy
+
+      - name: Print audit metadata
+        run: |
+          cat data/dukascopy/*.metadata.json
+
+      - name: Preserve raw pilot files
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-ai-dukascopy-xauusd-m1-pilot
+          path: data/dukascopy/
+          if-no-files-found: error
+          retention-days: 14
