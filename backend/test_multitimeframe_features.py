@@ -46,24 +46,27 @@ class MultiTimeframeFeatureTests(unittest.TestCase):
                 interval = {"H4": 14400, "H1": 3600, "M30": 1800, "M15": 900}[timeframe]
                 self.assertLessEqual(source_open + interval, row["decision_time"])
 
-    def test_future_higher_timeframe_candle_cannot_change_past_features(self):
+    def test_future_candle_on_any_timeframe_cannot_change_past_features(self):
+        intervals = {"H4": 14400, "H1": 3600, "M30": 1800, "M15": 900}
         data = {
-            "H4": candles(100, 14400),
-            "H1": candles(400, 3600),
-            "M30": candles(800, 1800),
-            "M15": candles(1600, 900),
+            "H4": candles(100, intervals["H4"]),
+            "H1": candles(400, intervals["H1"]),
+            "M30": candles(800, intervals["M30"]),
+            "M15": candles(1600, intervals["M15"]),
         }
         original = build_multitimeframe_features(data)
-        extended = {key: list(value) for key, value in data.items()}
-        future_time = extended["H4"][-1]["time"] + 14400
-        last_close = extended["H4"][-1]["close"]
-        extended["H4"].append({
-            "time": future_time, "open": last_close,
-            "high": last_close + 0.2, "low": last_close - 0.1,
-            "close": last_close + 0.1,
-        })
-        with_future = build_multitimeframe_features(extended)
-        self.assertEqual(original["rows"], with_future["rows"])
+        for timeframe, interval in intervals.items():
+            with self.subTest(timeframe=timeframe):
+                extended = {key: list(value) for key, value in data.items()}
+                future_time = extended[timeframe][-1]["time"] + interval
+                last_close = extended[timeframe][-1]["close"]
+                extended[timeframe].append({
+                    "time": future_time, "open": last_close,
+                    "high": last_close + 0.2, "low": last_close - 0.1,
+                    "close": last_close + 0.1,
+                })
+                with_future = build_multitimeframe_features(extended)
+                self.assertEqual(original["rows"], with_future["rows"])
 
     def test_missing_timeframe_is_rejected(self):
         with self.assertRaises(ValueError):
