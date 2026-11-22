@@ -1064,3 +1064,57 @@ def research_ml_evaluate_gradient_boosting_mtf(horizon: int = 5, min_move_pct: f
         raise HTTPException(status_code=422, detail=str(exc))
     except MarketStorageError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/research/strategy-lab/vwap-m15")
+def research_strategy_lab_vwap_m15(
+    horizon: int = 5,
+    spread_price: float = 0.0,
+    slippage_price: float = 0.0,
+):
+    """Run the isolated VWAP M15 strategy lab; read-only and research-only."""
+    from vwap_strategy_lab import run_vwap_strategy_lab
+
+    if isinstance(horizon, bool) or not 1 <= horizon <= 100:
+        raise HTTPException(status_code=400, detail="horizon must be between 1 and 100.")
+    if not math.isfinite(spread_price) or not 0 <= spread_price <= 1000:
+        raise HTTPException(status_code=400, detail="spread_price must be between 0 and 1000.")
+    if not math.isfinite(slippage_price) or not 0 <= slippage_price <= 1000:
+        raise HTTPException(status_code=400, detail="slippage_price must be between 0 and 1000.")
+
+    try:
+        mt5_source = get_latest_mt5_source()
+        if mt5_source:
+            market = get_mt5_market_candles(
+                mt5_source["symbol"], mt5_source["source"], "M15"
+            )
+            source_label = "Authenticated MT5 broker archive (read-only)"
+            volume_kind = "MT5 tick volume"
+            symbol = mt5_source["symbol"]
+            broker_source = mt5_source["source"]
+        else:
+            market = get_market_candles("M15")
+            source_label = "XAUS reference-market feed (not broker execution prices)"
+            volume_kind = "XAUS provider volume; semantics not independently verified"
+            symbol = market.get("symbol", "XAUUSD")
+            broker_source = None
+
+        result = run_vwap_strategy_lab(
+            market.get("candles") or [], horizon=horizon,
+            spread_price=spread_price, slippage_price=slippage_price,
+            volume_kind=volume_kind,
+        )
+        return {
+            **result, "symbol": symbol, "timeframe": "M15",
+            "data_source": source_label, "broker_source": broker_source,
+            "data_status": market.get("data_status"),
+            "last_candle_at": market.get("last_candle_at"),
+            "research_only": True, "read_only": True,
+            "execution_enabled": False, "accuracy_is_live": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except MarketDataError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
