@@ -89,10 +89,32 @@ def _signal(rows, index, breakout_period=20):
     prior_high = max(r["high"] for r in prior)
     prior_low = min(r["low"] for r in prior]
     last = rows[index]
-    # Trend-confirmed range break. No countertrend entries.
+    # BUY candidate: trend-confirmed range break.
     if closes[-1] > fast > slow and last["close"] > prior_high:
         return 1, atr
-    if closes[-1] < fast < slow and last["close"] < prior_low:
+
+    # SELL candidate: require stronger bearish regime confirmation than BUY.
+    # The slow EMA must be falling over five bars, the EMA gap must be
+    # meaningful relative to ATR, and the breakout candle must close bearish.
+    # This is a testable hypothesis, not an assertion that SELL is profitable.
+    ema_history = [
+        _ema([r["close"] for r in rows[:j + 1]], 50)
+        for j in (index - 5, index)
+    ]
+    bearish_slope = (
+        ema_history[0] is not None
+        and ema_history[1] is not None
+        and ema_history[1] < ema_history[0]
+    )
+    bearish_separation = fast < slow and (slow - fast) >= 0.15 * atr
+    bearish_candle = last["close"] < last["open"]
+    if (
+        closes[-1] < fast < slow
+        and last["close"] < prior_low
+        and bearish_slope
+        and bearish_separation
+        and bearish_candle
+    ):
         return -1, atr
     return None
 
@@ -203,7 +225,7 @@ def evaluate_net_expectancy(
     )
     return {
         "status": "complete",
-        "strategy": "EMA20/EMA50 trend-confirmed 20-candle breakout with ATR stop and fixed-R target",
+        "strategy": "BUY: EMA20/EMA50 20-candle breakout; SELL: stricter bearish-slope, ATR-separation and bearish-candle breakout; ATR stop and fixed-R target",
         "candle_count": len(rows),
         "time_split_index": boundary,
         "parameters": {"horizon": horizon, "stop_atr": stop_atr, "target_r": target_r,
@@ -218,6 +240,7 @@ def evaluate_net_expectancy(
         "minimum_holdout_trades_for_gate": 30,
         "limitations": [
             "Research-only; no broker orders are placed.",
+            "The SELL entry filter is a new hypothesis and must be evaluated independently; it has not been proven superior.",
             "The same fixed parameters are used in both chronological blocks; no tuning on holdout.",
             "Stop is assumed before target when both are touched in one candle.",
             "Costs are simplified price deductions and must be calibrated to the broker.",
