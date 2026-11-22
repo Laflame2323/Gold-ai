@@ -36,6 +36,7 @@ app.add_middleware(
     allow_origins=[
         "https://gold-ai-frontend-4sdiv2akn-la-flame2.vercel.app",
         "https://gold-ai-frontend-tawny.vercel.app",
+        "https://gold-ai-frontend-git-feature-owner-login-ui-la-flame2.vercel.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
