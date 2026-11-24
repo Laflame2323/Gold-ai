@@ -53,6 +53,66 @@ def _timestamp(value: Any, field: str) -> int:
     return number
 
 
+def confirm_closed_level_break(
+    candle: dict[str, Any],
+    *,
+    side: str,
+    level: float,
+    timeframe_seconds: int,
+    now: int,
+    max_candle_age_seconds: int = 3600,
+) -> dict[str, Any]:
+    """Confirm a directional level break using only a fully closed candle.
+
+    This is a generic timing primitive, not a complete strategy. The strategy
+    must determine the level and any additional setup/confluence conditions.
+    """
+    if not isinstance(candle, dict):
+        raise ValueError("candle must be an object.")
+    direction = str(side).strip().upper()
+    if direction not in {"BUY", "SELL"}:
+        raise ValueError("side must be BUY or SELL.")
+    price_level = _finite_positive(level, "level")
+    if isinstance(timeframe_seconds, bool) or not isinstance(timeframe_seconds, int) or timeframe_seconds < 1:
+        raise ValueError("timeframe_seconds must be a positive integer.")
+    if isinstance(max_candle_age_seconds, bool) or not isinstance(max_candle_age_seconds, int) or max_candle_age_seconds < 1:
+        raise ValueError("max_candle_age_seconds must be a positive integer.")
+    current_time = _timestamp(now, "now")
+    candle_time = _timestamp(candle.get("time", candle.get("timestamp")), "candle.time")
+    candle_close_time = candle_time + timeframe_seconds
+    close = _finite_positive(candle.get("close"), "candle.close")
+
+    if candle_close_time > current_time:
+        return {
+            "status": "WAIT",
+            "trigger_confirmed": False,
+            "reason": "The candle is still forming; wait for its close.",
+            "candle_close_time": candle_close_time,
+        }
+    if current_time - candle_close_time > max_candle_age_seconds:
+        return {
+            "status": "WAIT",
+            "trigger_confirmed": False,
+            "reason": "The completed candle is stale.",
+            "candle_close_time": candle_close_time,
+        }
+
+    crossed = close > price_level if direction == "BUY" else close < price_level
+    return {
+        "status": "CONFIRMED" if crossed else "WAIT",
+        "trigger_confirmed": crossed,
+        "reason": (
+            "Completed candle closed beyond the trigger level."
+            if crossed else "Completed candle did not close beyond the trigger level."
+        ),
+        "side": direction,
+        "level": price_level,
+        "close": close,
+        "candle_close_time": candle_close_time,
+        "decision_time": candle_close_time if crossed else None,
+    }
+
+
 def build_trade_plan(
     candidate: dict[str, Any],
     *,
