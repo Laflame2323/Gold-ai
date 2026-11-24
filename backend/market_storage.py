@@ -228,8 +228,10 @@ def get_mt5_tick_history(symbol, source, start_time, end_time, max_ticks=50000):
         "Connection": "close",
     }
     rows = []
-    for offset in range(0, max_ticks, 1000):
-        query = urlencode({**params, "offset": str(offset)})
+    fetch_limit = max_ticks + 1
+    for offset in range(0, fetch_limit, 1000):
+        page_limit = min(1000, fetch_limit - offset)
+        query = urlencode({**params, "limit": str(page_limit), "offset": str(offset)})
         last_error = "unknown read error"
         page = None
         for attempt in range(5):
@@ -275,6 +277,8 @@ def get_mt5_tick_history(symbol, source, start_time, end_time, max_ticks=50000):
             continue
 
     ticks.sort(key=lambda item: (item["time_msc"], item["id"]))
+    truncated = len(ticks) > max_ticks
+    ticks = ticks[:max_ticks]
     return {
         "symbol": symbol,
         "source": source,
@@ -283,6 +287,7 @@ def get_mt5_tick_history(symbol, source, start_time, end_time, max_ticks=50000):
         "start_time": start_time,
         "end_time": end_time,
         "max_ticks": max_ticks,
+        "truncated": truncated,
         "data_status": "available" if ticks else "empty",
         "read_only": True,
         "research_only": True,
