@@ -1,6 +1,6 @@
 import unittest
 
-from trade_workflow import build_trade_plan, evaluate_risk_gate
+from trade_workflow import build_trade_plan, confirm_closed_level_break, evaluate_risk_gate
 
 
 NOW = 1_800_000_000
@@ -45,6 +45,29 @@ def limits(**overrides):
 
 
 class TradeWorkflowTests(unittest.TestCase):
+    def test_entry_trigger_waits_for_candle_close(self):
+        result = confirm_closed_level_break(
+            {"time": NOW - 30, "close": 2655.0},
+            side="BUY", level=2650.0, timeframe_seconds=60, now=NOW,
+        )
+        self.assertEqual(result["status"], "WAIT")
+        self.assertFalse(result["trigger_confirmed"])
+
+    def test_entry_trigger_confirms_only_a_closed_break(self):
+        result = confirm_closed_level_break(
+            {"time": NOW - 60, "close": 2655.0},
+            side="BUY", level=2650.0, timeframe_seconds=60, now=NOW,
+        )
+        self.assertEqual(result["status"], "CONFIRMED")
+        self.assertEqual(result["decision_time"], NOW)
+
+    def test_entry_trigger_waits_when_close_did_not_break_level(self):
+        result = confirm_closed_level_break(
+            {"time": NOW - 60, "close": 2649.0},
+            side="BUY", level=2650.0, timeframe_seconds=60, now=NOW,
+        )
+        self.assertEqual(result["status"], "WAIT")
+
     def test_builds_reproducible_buy_plan_from_closed_candle(self):
         first = build_trade_plan(candidate(), now=NOW)
         second = build_trade_plan(candidate(), now=NOW)
