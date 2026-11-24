@@ -216,6 +216,8 @@ def build_trade_plan(
         "strategy_id": strategy_id,
         "strategy_version": strategy_version,
         "data_source": data_source,
+        "broker_feed_verified": candidate.get("broker_feed_verified") is True,
+        "instrument_enabled": candidate.get("instrument_enabled") is True,
         "candle_close_time": candle_close_time,
         "decision_time": decision_time,
         "expiry_time": expiry_time,
