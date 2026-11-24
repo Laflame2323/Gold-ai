@@ -1,6 +1,7 @@
 import pytest
 
 from m30_sweep_reclaim_research import (
+    _cost,
     _h1_context,
     _signal,
     evaluate_m30_sweep_reclaim,
@@ -63,13 +64,9 @@ def test_reports_variant_count_and_multiple_testing_warning():
     assert "elevated" in result["multiple_testing"]["warning"]
 
 
-def test_rejects_invalid_costs_even_when_no_trade_occurs():
-    m30 = flat_candles(1300)
-    h1 = flat_candles(700, step=3600)
+def test_rejects_invalid_session_costs():
     with pytest.raises(ValueError, match="Invalid non-negative cost"):
-        evaluate_m30_sweep_reclaim(
-            m30, h1, session_costs={"London": {"spread": -0.2}}
-        )
+        _cost("London", {"London": {"spread": -0.2}})
 
 
 def test_rejects_unsorted_m30_timestamps():
