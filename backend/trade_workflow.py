@@ -215,7 +215,13 @@ def evaluate_risk_gate(
 
     plan_risk = _finite_positive(plan.get("risk_pct"), "plan.risk_pct")
     plan_expiry = _timestamp(plan.get("expiry_time"), "plan.expiry_time")
-    plan_rr = _finite_positive(plan.get("net_reward_risk"), "plan.net_reward_risk")
+    try:
+        plan_rr = float(plan.get("net_reward_risk"))
+    except (TypeError, ValueError, OverflowError):
+        plan_rr = float("nan")
+    if not math.isfinite(plan_rr):
+        reasons.append("Net reward:risk is missing or invalid.")
+        plan_rr = float("-inf")
 
     if plan.get("research_only") is not True or plan.get("execution_enabled") is not False:
         reasons.append("Plan must remain explicitly research-only.")
