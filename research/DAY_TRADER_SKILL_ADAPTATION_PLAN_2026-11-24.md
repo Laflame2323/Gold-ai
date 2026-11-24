@@ -50,6 +50,16 @@ Gold AI remains a research and decision-support system. No broker order placemen
 - Only combine strategies when out-of-sample evidence shows complementary returns; correlated confirmations are not independent votes.
 - A 90% win rate is an aspiration, not a release gate. Positive net expectancy, adequate sample size, drawdown control, and out-of-sample stability are mandatory.
 
+## Current implementation status
+
+The isolated branch currently contains the following research-only building blocks:
+
+- `backend/trade_workflow.py`: completed-candle level-break confirmation, deterministic trade-plan validation, and an independent fail-closed risk gate.
+- `backend/trade_replay.py`: deterministic bid/ask replay with correct side-specific fills, gap handling, stop-first ambiguous-bar handling, time expiry, and explicit commission/slippage deductions.
+- `backend/test_trade_workflow.py` and `backend/test_trade_replay.py`: unit tests for the new domain functions.
+
+These modules are not yet connected to FastAPI endpoints, Supabase journaling, or the frontend. No test run has been confirmed by GitHub Actions yet, so the code must not be described as tested or production-ready.
+
 ## Delivery phases
 
 ### Phase 0 — branch and architecture
