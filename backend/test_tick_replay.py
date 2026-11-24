@@ -41,7 +41,7 @@ class TickReplayTests(unittest.TestCase):
             {"time_msc": 101000, "bid": 96.0, "ask": 96.2, "id": 2},
         ]
         result = simulate_trade_plan_on_ticks(
-            plan(side="SELL", entry_price=100, stop_price=102, target_price=96), rows
+            plan(side="SELL", entry_price=100, stop_price=102, target_price=96.2), rows
         )
         self.assertEqual(result["actual_entry"], 100.0)
         self.assertEqual(result["actual_exit"], 96.2)
@@ -69,7 +69,7 @@ class TickReplayTests(unittest.TestCase):
             simulate_trade_plan_on_ticks(plan(), rows)
 
     def test_expired_plan_has_no_entry(self):
-        result = simulate_trade_plan_on_ticks(plan(expiry_time=100), ticks())
+        result = simulate_trade_plan_on_ticks(plan(decision_time=90, expiry_time=99), ticks())
         self.assertEqual(result["status"], "no_entry")
 
     def test_commission_slippage_reduces_net_r(self):
