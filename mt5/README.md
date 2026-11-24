@@ -30,3 +30,14 @@ The backend validates the token, symbol, timeframe, OHLC values, timestamp offse
 - The bridge is read-only. It contains no order-placement code.
 - A successful upload confirms ingestion, not prediction accuracy or trading readiness.
 - Demo order execution will require a separate demo-only adapter, risk limits, spread checks, stop-loss validation, and an emergency kill switch. Real-money execution remains disabled.
+
+## Research-only bid/ask tick collector
+
+A separate Expert Advisor, `GoldAI_ReadOnly_Tick_Collector.mq5`, sends broker bid/ask quote ticks to the isolated `mt5_ticks_research` archive. It does not place, modify, or close trades.
+
+1. Use the same private `MT5_INGEST_TOKEN` already configured for the candle bridge; never put it in GitHub or the frontend.
+2. In desktop MT5, copy `GoldAI_ReadOnly_Tick_Collector.mq5` into `MQL5/Experts`, compile it in MetaEditor, and allow WebRequest to `https://gold-ai-mtf-research.onrender.com`.
+3. Attach it to the exact broker gold symbol used by the candle bridge. The default initial lookback is 24 hours and each request is capped at 500 ticks; keep MT5 running while it catches up and streams new quotes.
+4. Confirm successful uploads in the MT5 Experts tab. The backend deduplicates repeated ticks and stores them in a separate research-only table.
+
+The `/research/trade-replay` endpoint uses only matched bid/ask ticks from that exact broker and symbol. It refuses an empty archive and refuses a capped/truncated time window. If there are more than 50,000 ticks, narrow the replay window. A replay with no stop or target touch is marked `data_end`; it does not invent an expiry fill.
