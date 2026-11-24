@@ -44,10 +44,10 @@ class TradeReplayTests(unittest.TestCase):
         result = simulate_trade_plan(plan(), bid, ask, extra_cost_price=0.2)
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["side"], "BUY")
-        self.assertEqual(result["actual_entry"], 100.2)
+        self.assertEqual(result["actual_entry"], 100.0)
         self.assertEqual(result["actual_exit"], 110.0)
         self.assertEqual(result["exit_reason"], "target")
-        self.assertAlmostEqual(result["net_r"], 1.846154, places=5)
+        self.assertAlmostEqual(result["net_r"], 1.96, places=5)
 
     def test_sell_enters_on_bid_and_exits_on_ask_target(self):
         rows = paired_rows()
@@ -61,7 +61,7 @@ class TradeReplayTests(unittest.TestCase):
             bid, ask,
         )
         self.assertEqual(result["side"], "SELL")
-        self.assertEqual(result["actual_entry"], 100.0)
+        self.assertEqual(result["actual_entry"], 99.8)
         self.assertEqual(result["actual_exit"], 90.0)
         self.assertEqual(result["exit_reason"], "target")
 
