@@ -58,7 +58,7 @@ The isolated branch currently contains the following research-only building bloc
 - `backend/trade_replay.py`: deterministic bid/ask replay with correct side-specific fills, gap handling, stop-first ambiguous-bar handling, time expiry, and explicit commission/slippage deductions.
 - `backend/test_trade_workflow.py` and `backend/test_trade_replay.py`: unit tests for the new domain functions.
 
-These modules are not yet connected to FastAPI endpoints, Supabase journaling, or the frontend. No test run has been confirmed by GitHub Actions yet, so the code must not be described as tested or production-ready.
+These modules are not yet connected to FastAPI endpoints, Supabase journaling, or the frontend. GitHub Actions run 45383101913 completed successfully: all 143 backend unit tests passed. This validates the current research branch test suite, but does not make the modules production-ready.
 
 ## Delivery phases
 
