@@ -136,7 +136,8 @@ def simulate_trade_plan_on_ticks(
     if exit_reason is None:
         exit_index, last_tick = eligible[-1]
         exit_price = last_tick["bid"] if side == "BUY" else last_tick["ask"]
-        exit_reason = "time_expiry" if last_tick["time_msc"] >= expiry - 1 else "data_end"
+        # The last observed quote may precede expiry; do not claim an expiry fill.
+        exit_reason = "data_end"
 
     risk_distance = abs(actual_entry - stop)
     gross_pnl = sign * (exit_price - actual_entry)
