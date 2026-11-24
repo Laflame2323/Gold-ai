@@ -17,9 +17,8 @@ def flat_candles(count, start=0, step=1800, price=2000.0):
 
 def test_signal_uses_only_prior_twenty_candles_and_next_open():
     rows = flat_candles(22)
-    # Make the prior range low 2000 and the signal candle sweep/reclaim it.
-    rows[20] = {"time": 20 * 1800, "open": 2001.2, "high": 2002.5,
-                "low": 1999.8, "close": 2002.4}
+    rows[20] = {"time": 20 * 1800, "open": 2000.5, "high": 2002.5,
+                "low": 1998.8, "close": 2002.4}
     rows[21] = {"time": 21 * 1800, "open": 2002.4, "high": 2003,
                 "low": 2001.8, "close": 2002.6}
     signal = _signal(rows, 20)
@@ -64,7 +63,7 @@ def test_reports_variant_count_and_multiple_testing_warning():
     assert "elevated" in result["multiple_testing"]["warning"]
 
 
-def test_rejects_invalid_costs():
+def test_rejects_invalid_costs_even_when_no_trade_occurs():
     m30 = flat_candles(1300)
     h1 = flat_candles(700, step=3600)
     with pytest.raises(ValueError, match="Invalid non-negative cost"):
