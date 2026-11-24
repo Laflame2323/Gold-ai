@@ -95,6 +95,16 @@ class TradeWorkflowTests(unittest.TestCase):
         self.assertEqual(result["status"], "BLOCK")
         self.assertTrue(any("Verified broker candles" in reason for reason in result["reasons"]))
 
+    def test_risk_gate_blocks_unverified_cost_and_symbol_metadata(self):
+        plan = build_trade_plan(candidate(
+            cost_model_verified=False,
+            instrument_metadata_verified=False,
+        ), now=NOW)
+        result = evaluate_risk_gate(plan, limits(), now=NOW)
+        self.assertEqual(result["status"], "BLOCK")
+        self.assertTrue(any("transaction-cost model" in reason for reason in result["reasons"]))
+        self.assertTrue(any("symbol specifications" in reason for reason in result["reasons"]))
+
     def test_risk_gate_blocks_daily_risk_and_trade_count(self):
         plan = build_trade_plan(candidate(), now=NOW)
         result = evaluate_risk_gate(
