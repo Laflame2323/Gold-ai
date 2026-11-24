@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [main, research/net-expectancy-engine]
+    branches: [main, research/net-expectancy-engine, research/day-trader-workflow-adaptation]
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
