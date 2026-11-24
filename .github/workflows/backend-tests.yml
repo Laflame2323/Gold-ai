@@ -26,6 +26,6 @@ jobs:
       - name: Run backend unit tests
         working-directory: backend
         run: python -m unittest discover -s . -p "test_*.py" -v
-      - name: Confirm nested research tests are discoverable
+      - name: Run nested pytest research tests
         working-directory: backend
-        run: python -m unittest -v tests.test_d1_buy_candidate tests.test_point_in_time_features tests.test_profitability_research
+        run: python -m pytest -v tests/test_d1_buy_candidate.py tests/test_point_in_time_features.py tests/test_profitability_research.py tests/test_m30_sweep_reclaim_research.py
