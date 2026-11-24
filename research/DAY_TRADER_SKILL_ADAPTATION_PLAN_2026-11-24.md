@@ -55,10 +55,13 @@ Gold AI remains a research and decision-support system. No broker order placemen
 The isolated branch currently contains the following research-only building blocks:
 
 - `backend/trade_workflow.py`: completed-candle level-break confirmation, deterministic trade-plan validation, and an independent fail-closed risk gate.
-- `backend/trade_replay.py`: deterministic bid/ask replay with correct side-specific fills, gap handling, stop-first ambiguous-bar handling, time expiry, and explicit commission/slippage deductions.
-- `backend/test_trade_workflow.py` and `backend/test_trade_replay.py`: unit tests for the new domain functions.
+- `backend/trade_replay.py`: deterministic bid/ask OHLC replay with correct side-specific fills, gap handling, conservative stop-first ambiguous-bar handling, and explicit commission/slippage deductions.
+- `backend/tick_replay.py`: tick-by-tick bid/ask replay that checks every archived quote instead of guessing intrabar price order.
+- `backend/market_storage.py`: bounded, broker- and symbol-specific reads from the existing `mt5_ticks_research` archive, with pagination and explicit truncation detection.
+- `backend/main.py`: research-only `GET /research/trade-replay` endpoint. It requires a verified MT5 candle source and a complete archived bid/ask tick window; it never places orders.
+- `backend/test_trade_workflow.py`, `backend/test_trade_replay.py`, and `backend/test_tick_replay.py`: domain-level unit tests.
 
-These modules are not yet connected to FastAPI endpoints, Supabase journaling, or the frontend. GitHub Actions run 45383101913 completed successfully: all 143 backend unit tests passed. This validates the current research branch test suite, but does not make the modules production-ready.
+The Supabase project already contains `mt5_ticks_research` with the columns needed by the collector and replay service, RLS enabled, and broker/time indexes. A read-only count check found zero archived ticks at the time of implementation, so the replay endpoint will correctly return a no-data response until the read-only MT5 tick collector has been run. No Supabase schema or data was changed. The new endpoint is not yet connected to a frontend journal or alerts. The earlier 143-test run predates tick replay; the new full CI run is pending.
 
 ## Delivery phases
 
