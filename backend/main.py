@@ -699,6 +699,11 @@ def research_trade_replay(
                 status_code=503,
                 detail="No bid/ask ticks are archived for this broker, symbol and time window. Start the read-only MT5 tick collector first.",
             )
+        if archive.get("truncated"):
+            raise HTTPException(
+                status_code=413,
+                detail="The requested tick window exceeds max_ticks. Use a shorter time window so the replay includes every available quote.",
+            )
         plan = {
             "plan_id": None,
             "symbol": symbol,
