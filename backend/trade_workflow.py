@@ -67,10 +67,10 @@ def build_trade_plan(
       trigger_confirmed, candle_close_time, decision_time, expiry_time,
       entry_price, stop_price, target_price, risk_pct.
 
-    `round_trip_cost_price` is an optional price-unit estimate covering the
-    expected round-trip spread/commission/slippage/financing cost. It must be
-    supplied by a trusted instrument-specific evaluator before a plan can
-    pass the independent risk gate.
+    `round_trip_cost_price` is a price-unit estimate covering expected
+    round-trip spread/commission/slippage/financing. A trusted backend
+    evaluator must set `cost_model_verified`; caller-provided booleans must
+    never be treated as proof of broker-feed or instrument verification.
     """
     if not isinstance(candidate, dict):
         raise ValueError("candidate must be an object.")
@@ -122,7 +122,11 @@ def build_trade_plan(
     risk_pct = _finite_positive(candidate.get("risk_pct"), "risk_pct")
     if risk_pct > 100:
         raise ValueError("risk_pct cannot exceed 100.")
-    cost = _finite_non_negative(candidate.get("round_trip_cost_price", 0), "round_trip_cost_price")
+    if "round_trip_cost_price" not in candidate:
+        raise ValueError("A round_trip_cost_price estimate is required.")
+    cost = _finite_non_negative(candidate["round_trip_cost_price"], "round_trip_cost_price")
+    cost_model_verified = candidate.get("cost_model_verified") is True
+    instrument_metadata_verified = candidate.get("instrument_metadata_verified") is True
 
     if side == "BUY":
         if not stop < entry < target:
@@ -155,6 +159,8 @@ def build_trade_plan(
         "target_price": target,
         "risk_pct": risk_pct,
         "round_trip_cost_price": cost,
+        "cost_model_verified": cost_model_verified,
+        "instrument_metadata_verified": instrument_metadata_verified,
     }
     canonical = json.dumps(fingerprint_fields, sort_keys=True, separators=(",", ":"))
     plan_id = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:20]
@@ -163,6 +169,8 @@ def build_trade_plan(
         "plan_id": plan_id,
         **fingerprint_fields,
         "broker_feed_verified": candidate.get("broker_feed_verified") is True,
+        "cost_model_verified": cost_model_verified,
+        "instrument_metadata_verified": instrument_metadata_verified,
         "candle_closed": True,
         "trigger_confirmed": True,
         "gross_reward_risk": round(reward_risk, 6),
@@ -227,6 +235,10 @@ def evaluate_risk_gate(
         reasons.append("Plan must remain explicitly research-only.")
     if plan.get("broker_feed_verified") is not True:
         reasons.append("Verified broker candles are required; reference-feed plans cannot pass this gate.")
+    if plan.get("instrument_metadata_verified") is not True:
+        reasons.append("Verified broker symbol specifications are required.")
+    if plan.get("cost_model_verified") is not True:
+        reasons.append("A verified instrument-specific transaction-cost model is required.")
     if plan_expiry <= current_time:
         reasons.append("The trade plan has expired.")
     if plan_risk > max_trade_risk:
