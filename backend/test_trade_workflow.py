@@ -111,6 +111,12 @@ class TradeWorkflowTests(unittest.TestCase):
         self.assertTrue(result["research_only"])
         self.assertFalse(result["order_submitted"])
 
+    def test_risk_gate_blocks_costs_that_erase_the_reward(self):
+        plan = build_trade_plan(candidate(round_trip_cost_price=11.0), now=NOW)
+        result = evaluate_risk_gate(plan, limits(), now=NOW)
+        self.assertEqual(result["status"], "BLOCK")
+        self.assertIn("Net reward:risk is below the configured minimum.", result["reasons"])
+
     def test_risk_gate_blocks_expired_plan(self):
         plan = build_trade_plan(candidate(expiry_time=NOW + 1), now=NOW)
         result = evaluate_risk_gate(plan, limits(), now=NOW + 2)
