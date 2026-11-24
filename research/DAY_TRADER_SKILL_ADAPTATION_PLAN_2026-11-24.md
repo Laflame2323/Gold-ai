@@ -63,6 +63,23 @@ The isolated branch currently contains the following research-only building bloc
 
 The Supabase project already contains `mt5_ticks_research` with the columns needed by the collector and replay service, RLS enabled, and broker/time indexes. A read-only count check found zero archived ticks at the time of implementation, so the replay endpoint will correctly return a no-data response until the read-only MT5 tick collector has been run. No Supabase schema or data was changed. The new endpoint is not yet connected to a frontend journal or alerts. The earlier 143-test run predates tick replay. A subsequent GitHub Actions run passed all 151 backend unit tests: https://github.com/Laflame2323/Gold-ai/actions/runs/45391393710.
 
+## Historical data and initial screens without desktop MT5
+
+The user does not have access to a desktop MT5 terminal until the weekend. Research therefore continued using the existing verified Exness trial-source OHLC archive. The MT5 tick collector and tick-level replay still require desktop MT5 and must wait.
+
+A read-only inventory of the connected Gold AI Supabase project found:
+- `public.market_candles` contains 248,573 rows across instruments/timeframes.
+- Verified Exness trial-source XAUUSDm history includes 9,502 H4 candles (2018-06-28 through 2026-11-19), 50,035 M30 candles (2022-08-26 through 2026-11-19), 50,031 M15 candles, and 32,564 H1 candles.
+- The H4 set has one gap longer than 72 hours (largest gap: 4 days).
+- The M30 set has 254 gaps longer than 90 minutes, eight longer than 72 hours, and a largest gap of 73.5 hours. Market-session/weekend gaps need an explicit audit.
+- `public.mt5_ticks_research` still has zero rows. No tick-level replay or broker-accurate spread analysis is possible yet.
+
+Two preliminary fixed-rule screens were completed:
+1. `research/EXNESS_XAUUSDM_H4_INITIAL_SCREEN_2026-11-24.md`: EMA20/EMA50 breakout, strict SELL filter, 1.5 ATR stop, 2R target, next-bar-open entry, 24-bar maximum holding period, and chronological 75/25 split. The 80-trade later holdout showed 55.00% win rate, +0.5879R expectancy, and 2.3653 profit factor before calibrated broker costs. The earlier development block showed 38.43% wins, +0.0911R expectancy, 1.1505 PF, and 23.06R maximum drawdown. This regime divergence is a material warning.
+2. `research/EXNESS_XAUUSDM_M30_DAY_TRADING_SCREEN_2026-11-24.md`: the same fixed breakout hypothesis with a 16-M30-candle (8-hour) maximum holding period. On 50,035 verified closed M30 candles, the 417-trade later holdout showed 38.85% wins, +0.0861R expectancy, 1.1518 PF, and 16.9412R maximum drawdown before calibrated costs. Development performance was weaker: 39.38% wins, +0.0498R expectancy, 1.0883 PF, and 32.4009R maximum drawdown. Development expectancy was approximately flat after a hypothetical 0.25 XAUUSD price-unit round-trip deduction and negative at 0.50. The BUY side was more consistent than SELL; SELL was negative in development and only marginally positive in holdout.
+
+Neither screen establishes a verified profit rate. The historical data is OHLC, not tick data; actual bid/ask spread, commission, swap, and slippage are not calibrated. The cost deductions are illustrative only. The two timeframes must not be combined into one claimed Gold AI profit rate.
+
 ## Delivery phases
 
 ### Phase 0 — branch and architecture
@@ -91,18 +108,3 @@ Expose research-only plans, replay results, risk vetoes, and alerts in the front
 - No automatic broker execution.
 - No claims of 90% accuracy, profitability, or calibrated probabilities without robust evidence.
 - No production branch changes in this research task.
-
-
-## Historical data available without desktop MT5
-
-The user does not have access to a desktop MT5 terminal until the weekend. Research can continue using the existing archived candle data; the MT5 tick collector must wait until desktop MT5 is available.
-
-A read-only inventory of the connected Gold AI Supabase project found:
-- `public.market_candles` contains 248,573 rows across instruments/timeframes.
-- Verified Exness trial-source XAUUSDm history includes 9,502 H4 candles from 2018-06-28 through 2026-11-19, plus over 50,000 candles on M1, M5, M15, and M30.
-- The verified H4 set has one gap longer than 72 hours (largest gap: 4 days); missing-data periods require review.
-- `public.mt5_ticks_research` still has zero rows. No tick-level replay or broker-accurate spread analysis is possible yet.
-
-A preliminary fixed-rule H4 screen was completed and documented in `research/EXNESS_XAUUSDM_H4_INITIAL_SCREEN_2026-11-24.md`. It used the existing EMA20/EMA50 breakout rule, strict SELL filter, 1.5 ATR stop, 2R target, next-bar-open entry, and a chronological 75/25 split. The 80-trade later holdout showed 55.00% win rate, +0.5879R expectancy, and 2.3653 profit factor before calibrated broker costs. The earlier development block showed only 38.43% wins, +0.0911R expectancy, 1.1505 PF, and 23.06R maximum drawdown. The divergence is a material regime-stability warning. Extra cost deductions were illustrative only; actual spread, commission, swap, and slippage are not known.
-
-This is not a verified Gold AI profit rate and is not permission to trade or deploy. The next research task is a separate M30 day-trading evaluation with fixed rules and an untouched chronological holdout, followed by broker-specific tick replay once desktop MT5 is available. Production remains unchanged.
