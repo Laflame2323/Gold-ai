@@ -16,6 +16,8 @@ def candidate(**overrides):
         "data_source": "MT5:DemoBroker",
         "broker_feed_verified": True,
         "instrument_enabled": True,
+        "instrument_metadata_verified": True,
+        "cost_model_verified": True,
         "candle_closed": True,
         "trigger_confirmed": True,
         "candle_close_time": NOW - 60,
