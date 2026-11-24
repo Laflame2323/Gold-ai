@@ -141,8 +141,13 @@ def build_trade_plan(
     symbol = str(candidate.get("symbol", "")).strip().upper()
     if symbol not in SUPPORTED_SYMBOLS:
         raise ValueError("Unsupported instrument. Use XAUUSD or EURUSD.")
-    if symbol == "EURUSD" and candidate.get("instrument_enabled") is not True:
-        raise ValueError("EURUSD is disabled until its feed and broker symbol metadata are verified.")
+    if symbol == "EURUSD" and not all(
+        candidate.get(key) is True for key in (
+            "instrument_enabled", "broker_feed_verified",
+            "instrument_metadata_verified", "cost_model_verified",
+        )
+    ):
+        raise ValueError("EURUSD is disabled until its broker feed, symbol metadata and cost model are verified.")
     if candidate.get("instrument_enabled") is not True:
         raise ValueError(f"{symbol} is not enabled for research candidates.")
 
