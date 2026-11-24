@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from urllib.request import Request
 from analysis_engine import analyse_timeframes
 from market_data import MarketDataError, _fetch_json_with_retries, get_market_candles, get_daily_history, get_intraday_prices
-from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run, get_latest_mt5_source, get_mt5_market_candles, MarketStorageError
+from market_storage import archive_market_candles, archive_daily_history, archive_intraday_prices, archive_gold_cot, archive_macro_context, record_collector_run, get_latest_mt5_source, get_mt5_market_candles, get_mt5_tick_history, MarketStorageError
 from cot_data import COTDataError, get_gold_cot
 from macro_data import MacroDataError, get_macro_context
 import json
@@ -654,6 +654,83 @@ def ingest_mt5_ticks(
         "research_only": True,
         "read_only": True,
     }
+
+
+
+@app.get("/research/trade-replay")
+def research_trade_replay(
+    side: str,
+    decision_time: int,
+    expiry_time: int,
+    entry_price: float,
+    stop_price: float,
+    target_price: float,
+    extra_cost_price: float = 0.0,
+    max_ticks: int = 50000,
+):
+    """Replay one supplied plan against archived broker bid/ask ticks; never executes."""
+    from tick_replay import simulate_trade_plan_on_ticks
+
+    selected_side = side.upper()
+    if selected_side not in {"BUY", "SELL"}:
+        raise HTTPException(status_code=400, detail="side must be BUY or SELL.")
+    if decision_time <= 0 or expiry_time <= decision_time:
+        raise HTTPException(status_code=400, detail="Use positive Unix seconds; expiry_time must be later.")
+    if not all(math.isfinite(value) and value > 0 for value in (entry_price, stop_price, target_price)):
+        raise HTTPException(status_code=400, detail="Entry, stop and target must be finite positive prices.")
+    if not math.isfinite(extra_cost_price) or extra_cost_price < 0:
+        raise HTTPException(status_code=400, detail="extra_cost_price must be finite and non-negative.")
+    if max_ticks < 100 or max_ticks > 50000:
+        raise HTTPException(status_code=400, detail="max_ticks must be between 100 and 50,000.")
+
+    try:
+        source = get_latest_mt5_source()
+        if not source:
+            raise HTTPException(
+                status_code=503,
+                detail="No verified MT5 broker candle source is available to identify the broker feed.",
+            )
+        symbol, broker_source = source["symbol"], source["source"]
+        archive = get_mt5_tick_history(
+            symbol, broker_source, decision_time, expiry_time, max_ticks=max_ticks
+        )
+        if not archive["ticks"]:
+            raise HTTPException(
+                status_code=503,
+                detail="No bid/ask ticks are archived for this broker, symbol and time window. Start the read-only MT5 tick collector first.",
+            )
+        plan = {
+            "plan_id": None,
+            "symbol": symbol,
+            "side": selected_side,
+            "decision_time": decision_time,
+            "expiry_time": expiry_time,
+            "entry_price": entry_price,
+            "stop_price": stop_price,
+            "target_price": target_price,
+        }
+        result = simulate_trade_plan_on_ticks(
+            plan, archive["ticks"], extra_cost_price=extra_cost_price
+        )
+        return {
+            **result,
+            "broker_source": broker_source,
+            "tick_count_available": archive["count"],
+            "tick_window": {
+                "start_time": decision_time,
+                "end_time_exclusive": expiry_time,
+            },
+            "data_source": "Authenticated MT5 broker bid/ask tick archive",
+            "research_only": True,
+            "read_only": True,
+            "execution_enabled": False,
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MarketStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
 
 @app.get("/broker/mt5/status")
