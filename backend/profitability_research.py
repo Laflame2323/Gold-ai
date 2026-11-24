@@ -87,7 +87,7 @@ def _signal(rows, index, breakout_period=20):
         return None
     prior = rows[index - breakout_period:index]
     prior_high = max(r["high"] for r in prior)
-    prior_low = min(r["low"] for r in prior]
+    prior_low = min(r["low"] for r in prior)
     last = rows[index]
     # BUY candidate: trend-confirmed range break.
     if closes[-1] > fast > slow and last["close"] > prior_high:
