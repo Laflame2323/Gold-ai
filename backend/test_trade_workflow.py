@@ -110,7 +110,7 @@ class TradeWorkflowTests(unittest.TestCase):
 
     def test_eurusd_stays_disabled_until_enabled(self):
         with self.assertRaisesRegex(ValueError, "EURUSD is disabled"):
-            build_trade_plan(candidate(symbol="EURUSD"), now=NOW)
+            build_trade_plan(candidate(symbol="EURUSD", instrument_enabled=False), now=NOW)
 
     def test_risk_gate_blocks_reference_feed(self):
         plan = build_trade_plan(candidate(broker_feed_verified=False), now=NOW)
