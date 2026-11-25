@@ -104,7 +104,7 @@ def test_bid_ask_evaluator_rejects_ask_below_bid():
     bid = make_candles()
     ask = [{key: (value + 0.4 if key in ("open", "high", "low", "close") else value)
             for key, value in row.items()} for row in bid]
-    ask[100] = {key: (value - 0.1 if key in ("open", "high", "low", "close") else value)
+    ask[100] = {key: (value - 0.5 if key in ("open", "high", "low", "close") else value)
                 for key, value in ask[100].items()}
     with pytest.raises(ValueError, match="must not be below"):
         evaluate_bid_ask_expectancy(bid, ask)
