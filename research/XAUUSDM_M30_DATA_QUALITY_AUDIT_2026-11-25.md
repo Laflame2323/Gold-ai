@@ -87,3 +87,22 @@ Official references:
 - Exness XAUUSD trading hours: https://www.exness.com/commodities/xauusd/
 
 The Exness page states that Tick History provides past bid and ask prices in a downloadable ZIP, identifies the `m` suffix with Standard accounts, and cautions that the archive is indicative/informational. The public XAUUSD product page describes standard gold trading as 24/5. Neither page alone supplies a complete historical XAUUSDm holiday/session calendar, so the session-gap classification remains open.
+
+
+## Point-in-time H1 context audit — correction and refinement (2026-11-25)
+
+An initial exact-timestamp join incorrectly flagged 1,092 M30 rows because it required a particular expected H1 open timestamp to exist. That is not the evaluator's actual rule: at each M30 signal close, it selects the latest H1 candle whose open time plus one hour is no later than the M30 decision close.
+
+A follow-up read-only query examined the 1,092 rows from the exact-timestamp mismatch set and selected the latest H1 candle completed by each M30 decision close:
+
+- Previously flagged rows: 1,092
+- Rows with at least one prior completed H1 candle: 1,092
+- Rows with no prior completed H1 candle: 0
+- Rows where the latest completed H1 candle was older than 90 minutes at decision time: 254
+- Maximum observed H1 age at decision time: 3 days, 1 hour, 30 minutes
+
+Therefore, the earlier 1,092 figure is **not a missing-H1-context count** and must not be described as such. The material remaining concern is stale H1 context across market closures and long data gaps. The 254 observations are a diagnostic flag, not automatically 254 defects: their acceptability depends on the actual instrument session calendar and a frozen freshness policy.
+
+The evaluator currently uses the latest completed H1 row without a maximum-age check. Before formal replay, define and freeze a point-in-time freshness/session rule. Do not forward-fill H1 prices or treat a stale context as fresh. Candidate options to test *without looking at strategy outcomes* include (a) fail closed when H1 age exceeds a conservative fixed threshold, and (b) fail closed when the elapsed time exceeds a threshold that is explicitly session-calendar-aware. The latter cannot be implemented responsibly until the historical Exness session/holiday calendar is sourced and validated.
+
+No production code or Supabase data/schema was changed by this follow-up audit.
