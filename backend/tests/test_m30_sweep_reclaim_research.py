@@ -259,3 +259,52 @@ def test_time_exit_occurs_on_twelfth_candle_including_entry(monkeypatch):
     assert outcome["exit_reason"] == "time"
     assert outcome["bars_held"] == 12
     assert outcome["exit_time"] == rows[42]["time"]
+
+
+def test_statistics_include_losing_streak_and_holding_time():
+    rows = [
+        {"gross_r": 1.0, "net_r": 1.0, "bars_held": 2},
+        {"gross_r": -0.5, "net_r": -0.5, "bars_held": 4},
+        {"gross_r": -0.2, "net_r": -0.2, "bars_held": 6},
+        {"gross_r": -0.1, "net_r": -0.1, "bars_held": 8},
+        {"gross_r": 0.5, "net_r": 0.5, "bars_held": 10},
+    ]
+    stats = research._stats(rows)
+    assert stats["longest_losing_streak"] == 3
+    assert stats["holding_bars_mean"] == pytest.approx(6.0)
+    assert stats["holding_bars_median"] == 6
+
+
+def test_block_bootstrap_expectancy_interval_is_deterministic():
+    rows = [
+        {"exit_index": i, "gross_r": (0.8 if i % 3 else -0.6), "net_r": (0.7 if i % 3 else -0.7)}
+        for i in range(30)
+    ]
+    first = research._block_bootstrap_expectancy_ci(rows, "net_r", block_length=5, replications=500, seed=17)
+    second = research._block_bootstrap_expectancy_ci(rows, "net_r", block_length=5, replications=500, seed=17)
+    assert first == second
+    assert first["status"] == "complete"
+    assert first["n"] == 30
+    assert first["ci_95_lower"] <= first["expectancy_r"] <= first["ci_95_upper"]
+
+
+def test_block_bootstrap_refuses_too_few_trades_for_block_length():
+    rows = [{"exit_index": i, "gross_r": 0.5} for i in range(9)]
+    result = research._block_bootstrap_expectancy_ci(rows, "gross_r", block_length=5)
+    assert result["status"] == "insufficient_independent_blocks"
+    assert result["ci_95_lower"] is None
+    assert result["replications"] == 0
+
+
+def test_block_bootstrap_net_interval_is_unavailable_without_costs():
+    rows = [{"exit_index": i, "gross_r": 0.5, "net_r": None} for i in range(20)]
+    result = research._block_bootstrap_expectancy_ci(rows, "net_r", block_length=5)
+    assert result["status"] == "insufficient_independent_blocks"
+    assert result["n"] == 0
+
+
+def test_block_bootstrap_rejects_invalid_inputs():
+    with pytest.raises(ValueError, match="block_length"):
+        research._block_bootstrap_expectancy_ci([], block_length=0)
+    with pytest.raises(ValueError, match="replications"):
+        research._block_bootstrap_expectancy_ci([], replications=10)
