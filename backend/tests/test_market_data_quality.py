@@ -106,3 +106,11 @@ def test_rejects_invalid_audit_configuration():
         audit_candles(rows(), timeframe_seconds=0)
     with pytest.raises(ValueError):
         audit_candles(rows(), timeframe_seconds=1800, unusual_gap_multiple=1)
+
+
+def test_off_grid_timestamp_is_reported():
+    data = rows()
+    data[2]["time"] += 60
+    result = audit_candles(data, timeframe_seconds=1800)
+    assert result["status"] == "invalid"
+    assert any(e["reason"] == "timestamp_off_timeframe_grid" for e in result["errors"])
