@@ -308,3 +308,25 @@ def test_block_bootstrap_rejects_invalid_inputs():
         research._block_bootstrap_expectancy_ci([], block_length=0)
     with pytest.raises(ValueError, match="replications"):
         research._block_bootstrap_expectancy_ci([], replications=10)
+
+
+def test_empty_statistics_keep_the_extended_schema():
+    stats = research._stats([])
+    assert stats["longest_losing_streak"] == 0
+    assert stats["holding_bars_mean"] is None
+    assert stats["holding_bars_median"] is None
+
+
+def test_report_includes_gross_and_net_uncertainty_by_side():
+    result = research.evaluate_m30_sweep_reclaim(candles(1300), h1_history())
+    uncertainty = result["periods"]["development"]["uncertainty"]
+    assert "BUY_gross_expectancy_95_ci" in uncertainty
+    assert "SELL_gross_expectancy_95_ci" in uncertainty
+    assert "combined_gross_expectancy_95_ci" in uncertainty
+    assert uncertainty["combined_net_expectancy_95_ci"]["n"] == 0
+
+
+def test_block_bootstrap_rejects_non_finite_trade_values():
+    rows = [{"exit_index": i, "gross_r": float("nan")} for i in range(12)]
+    with pytest.raises(ValueError, match="finite"):
+        research._block_bootstrap_expectancy_ci(rows, "gross_r")
