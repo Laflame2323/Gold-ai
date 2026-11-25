@@ -160,7 +160,9 @@ def test_overlap_is_rejected_until_after_exit_bar(monkeypatch):
 
 def test_opening_gap_through_stop_fills_at_open_not_stop(monkeypatch):
     rows = bullish_signal_rows()
-    rows[31] = {"time": BASE + 31 * 1800, "open": 1990,
+    rows[31] = {"time": BASE + 31 * 1800, "open": 2000,
+                "high": 2001, "low": 1999, "close": 2000}
+    rows[32] = {"time": BASE + 32 * 1800, "open": 1990,
                 "high": 1992, "low": 1988, "close": 1991}
     signal = {"side": "BUY", "atr": 2.0, "sweep_extreme": 1998.5,
               "prior_range_high": 2001, "prior_range_low": 1999,
