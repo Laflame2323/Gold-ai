@@ -152,11 +152,11 @@ def _simulate_segment(m30, h1, atrs, start, end, fingerprint, candidate_version,
             candidate_version, fingerprint, side, ts, entry_bar["time"], entry, stop, target,
             risk, 1.5 * risk, MAX_HOLDING_BARS, atr, sweep, sig["prior_range_high"], sig["prior_range_low"],
             sig["body_ratio"], sig["close_position"], tuple(ctx.items()),
-            {"entry": "next available M30 open", "atr": "Wilder ATR(14), through completed signal candle",
+            tuple({"entry": "next available M30 open", "atr": "Wilder ATR(14), through completed signal candle",
              "stop_buffer_atr": .10, "stop_distance_atr_min": .50, "stop_distance_atr_max": 2.00,
              "target_r": 1.5, "max_holding_bars_including_entry_bar": 12,
              "same_bar_stop_target": "stop first", "opening_gap": "fill at open if crossed",
-             "h1_slope": "EMA20 now minus previous completed-H1 EMA20"} .items())
+             "h1_slope": "EMA20 now minus previous completed-H1 EMA20"}.items()))
         pd = asdict(plan)
         pd["h1_context"] = dict(plan.h1_context)
         pd["assumptions"] = dict(plan.assumptions)
