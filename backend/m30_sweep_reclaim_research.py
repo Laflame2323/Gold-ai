@@ -100,7 +100,10 @@ def _h1_context(decision_close_time: int, h1: list[dict]) -> dict[str, Any] | No
     e20, e50 = _ema_series(closes, 20), _ema_series(closes, 50)
     slope = e20[-1] - e20[-2]
     return {
-        "last_completed_h1_open": completed[-1]["time"], "completed_h1_bars": len(completed),
+        "last_completed_h1_open": completed[-1]["time"],
+        "last_completed_h1_close_time": completed[-1]["time"] + H1_SECONDS,
+        "h1_age_seconds_at_decision": decision_close_time - (completed[-1]["time"] + H1_SECONDS),
+        "completed_h1_bars": len(completed),
         "ema20": e20[-1], "ema50": e50[-1], "ema20_slope_1_h1_bar": slope,
         "ema_order": "bullish" if e20[-1] > e50[-1] else "bearish" if e20[-1] < e50[-1] else "flat",
         "slope_definition": "current completed-H1 EMA20 minus previous completed-H1 EMA20",
