@@ -87,6 +87,8 @@ def test_future_changes_do_not_change_earlier_feature_or_entry_fields():
 def test_rejects_unsupported_horizon_and_bad_ohlc():
     with pytest.raises(ValueError, match="unsupported"):
         build_directional_labels(make_candles(), "H1", 3)
+    with pytest.raises(ValueError, match="unsupported"):
+        build_directional_labels(make_candles(), "H1", 1.0)
     candles = make_candles()
     candles[0]["high"] = 1000
     with pytest.raises(ValueError, match="invalid high"):
