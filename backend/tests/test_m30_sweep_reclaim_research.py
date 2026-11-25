@@ -65,6 +65,8 @@ def test_h1_context_uses_candle_closed_at_m30_close_but_not_later():
     context = research._h1_context(decision_close, h1 + [exactly_closed, too_late])
     assert context is not None
     assert context["last_completed_h1_open"] == exactly_closed["time"]
+    assert context["last_completed_h1_close_time"] == decision_close
+    assert context["h1_age_seconds_at_decision"] == 0
 
 
 def test_missing_h1_fails_closed():
