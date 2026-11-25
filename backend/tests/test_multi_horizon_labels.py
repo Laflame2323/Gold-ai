@@ -63,7 +63,8 @@ def test_same_bar_touching_both_barriers_is_neutral():
 
 def test_session_gap_invalidates_event_instead_of_bridging_it():
     candles = make_candles()
-    candles[14]["time"] += 3600
+    for index in range(14, len(candles)):
+        candles[index]["time"] += 3600
     result = build_directional_labels(candles, "H1", 1)
     assert result["excluded_counts"]["missing_or_session_gap"] > 0
     assert not any(item["decision_index"] == 13 for item in result["events"])
