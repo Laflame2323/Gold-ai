@@ -1,6 +1,6 @@
 """Frozen deterministic M30 sweep-and-reclaim evaluator. Research only."""
 from __future__ import annotations
-import hashlib, json, math
+import hashlib, json, math, random
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
@@ -189,6 +189,46 @@ def _simulate_segment(m30, h1, atrs, start, end, fingerprint, candidate_version,
         last_exit_index = exit_i
     return {"plans": plans, "outcomes": outcomes, "rejected": rejected}
 
+def _block_bootstrap_expectancy_ci(rows, value_key="gross_r", *, block_length=5, replications=2000, seed=20261125):
+    """Deterministic circular moving-block bootstrap over chronological trade outcomes."""
+    if value_key not in {"gross_r", "net_r"}:
+        raise ValueError("value_key must be gross_r or net_r")
+    if isinstance(block_length, bool) or not isinstance(block_length, int) or block_length < 1:
+        raise ValueError("block_length must be a positive integer")
+    if isinstance(replications, bool) or not isinstance(replications, int) or replications < 100:
+        raise ValueError("replications must be an integer >= 100")
+    ordered_rows = sorted(rows, key=lambda row: (row.get("exit_index", 0), row.get("exit_time", 0)))
+    values = [float(row[value_key]) for row in ordered_rows if row.get(value_key) is not None]
+    if any(not math.isfinite(value) for value in values):
+        raise ValueError("bootstrap values must be finite")
+    n = len(values)
+    if n < 2 * block_length:
+        return {"status": "insufficient_independent_blocks", "n": n, "block_length_trades": block_length,
+                "replications": 0, "expectancy_r": None, "ci_95_lower": None, "ci_95_upper": None}
+    rng = random.Random(seed)
+    estimates = []
+    for _ in range(replications):
+        sample = []
+        while len(sample) < n:
+            start = rng.randrange(n)
+            sample.extend(values[(start + offset) % n] for offset in range(block_length))
+        sample = sample[:n]
+        estimates.append(sum(sample) / n)
+    estimates.sort()
+    def percentile(p):
+        position = (len(estimates) - 1) * p
+        lower = math.floor(position)
+        upper = math.ceil(position)
+        if lower == upper:
+            return estimates[lower]
+        return estimates[lower] + (estimates[upper] - estimates[lower]) * (position - lower)
+    return {"status": "complete", "n": n, "block_length_trades": block_length,
+            "replications": replications, "seed": seed,
+            "expectancy_r": sum(values) / n,
+            "ci_95_lower": percentile(0.025), "ci_95_upper": percentile(0.975),
+            "method": "circular_moving_block_bootstrap_over_chronological_trades"}
+
+
 def _stats(rows, net=False):
     vals = [r["net_r" if net else "gross_r"] for r in rows if r["net_r" if net else "gross_r"] is not None]
     if not vals:
@@ -201,9 +241,26 @@ def _stats(rows, net=False):
         eq += v; peak = max(peak, eq); dd = max(dd, peak - eq)
     ordered, mid = sorted(vals), len(vals) // 2
     median = ordered[mid] if len(vals) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+    longest_losing_streak = current_losing_streak = 0
+    for value in vals:
+        if value < 0:
+            current_losing_streak += 1
+            longest_losing_streak = max(longest_losing_streak, current_losing_streak)
+        else:
+            current_losing_streak = 0
+    holding = [int(row["bars_held"]) for row in rows if row.get("bars_held") is not None]
+    holding_sorted = sorted(holding)
+    if holding_sorted:
+        hmid = len(holding_sorted) // 2
+        holding_median = holding_sorted[hmid] if len(holding_sorted) % 2 else (holding_sorted[hmid - 1] + holding_sorted[hmid]) / 2
+    else:
+        holding_median = None
     return {"trades": len(vals), "win_rate_pct": 100 * len(wins) / len(vals),
             "expectancy_r": sum(vals) / len(vals), "median_r": median,
-            "profit_factor": gp / gl if gl else ("infinite" if gp else None), "max_drawdown_r": dd}
+            "profit_factor": gp / gl if gl else ("infinite" if gp else None), "max_drawdown_r": dd,
+            "longest_losing_streak": longest_losing_streak,
+            "holding_bars_mean": sum(holding) / len(holding) if holding else None,
+            "holding_bars_median": holding_median}
 
 def evaluate_m30_sweep_reclaim(
     m30_candles: list[dict], h1_candles: list[dict] | None = None, *,
@@ -252,6 +309,15 @@ def evaluate_m30_sweep_reclaim(
                   "BUY": {"gross": _stats(sides["BUY"]), "net": _stats(sides["BUY"], True)},
                   "SELL": {"gross": _stats(sides["SELL"]), "net": _stats(sides["SELL"], True)},
                   "combined": {"gross": _stats(trades), "net": _stats(trades, True)},
+                  "uncertainty": {
+                      "method": "circular moving-block bootstrap over chronological trades",
+                      "BUY_gross_expectancy_95_ci": _block_bootstrap_expectancy_ci(sides["BUY"], "gross_r"),
+                      "BUY_net_expectancy_95_ci": _block_bootstrap_expectancy_ci(sides["BUY"], "net_r"),
+                      "SELL_gross_expectancy_95_ci": _block_bootstrap_expectancy_ci(sides["SELL"], "gross_r"),
+                      "SELL_net_expectancy_95_ci": _block_bootstrap_expectancy_ci(sides["SELL"], "net_r"),
+                      "combined_gross_expectancy_95_ci": _block_bootstrap_expectancy_ci(trades, "gross_r"),
+                      "combined_net_expectancy_95_ci": _block_bootstrap_expectancy_ci(trades, "net_r"),
+                  },
                   "plans": result["plans"], "outcomes": trades}
         if scenarios:
             period["cost_sensitivity"] = {}
