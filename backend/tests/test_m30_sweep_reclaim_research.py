@@ -232,3 +232,30 @@ def test_cost_scenarios_reduce_net_expectancy():
     base_net = gross_r - 0.25 / plan["risk_price"]
     stress_net = gross_r - 0.75 / plan["risk_price"]
     assert stress_net < base_net
+
+
+
+def test_report_separates_supplied_dataset_fingerprint_from_payload_hash():
+    result = research.evaluate_m30_sweep_reclaim(
+        candles(1300), h1_history(), dataset_fingerprint="archive-manifest-v7"
+    )
+    assert result["dataset_fingerprint"] == "archive-manifest-v7"
+    assert len(result["candle_payload_sha256"]) == 64
+    assert result["candle_payload_sha256"] != result["dataset_fingerprint"]
+
+
+def test_time_exit_occurs_on_twelfth_candle_including_entry(monkeypatch):
+    rows = bullish_signal_rows()
+    signal = {"side": "BUY", "atr": 2.0, "sweep_extreme": 1998.5,
+              "prior_range_high": 2001, "prior_range_low": 1999,
+              "body_ratio": .5, "close_position": .8}
+    monkeypatch.setattr(research, "_detect_signal",
+                        lambda _rows, _atrs, index: signal if index == 30 else None)
+    result = research._simulate_segment(
+        rows, h1_history(), research._wilder_atr(rows), 30, 70,
+        "fingerprint", research.VERSION, None,
+    )
+    outcome = result["outcomes"][0]
+    assert outcome["exit_reason"] == "time"
+    assert outcome["bars_held"] == 12
+    assert outcome["exit_time"] == rows[42]["time"]
