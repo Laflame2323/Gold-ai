@@ -28,4 +28,4 @@ jobs:
         run: python -m unittest discover -s . -p "test_*.py" -v
       - name: Run nested pytest research tests
         working-directory: backend
-        run: python -m pytest -v tests/test_d1_buy_candidate.py tests/test_point_in_time_features.py tests/test_profitability_research.py tests/test_m30_sweep_reclaim_research.py
+        run: python -m pytest -v tests/test_d1_buy_candidate.py tests/test_point_in_time_features.py tests/test_profitability_research.py tests/test_m30_sweep_reclaim_research.py tests/test_market_data_quality.py
