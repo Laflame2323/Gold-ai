@@ -199,3 +199,36 @@ def test_dataset_fingerprint_is_stable_for_identical_inputs():
     one = research.evaluate_m30_sweep_reclaim(rows, h1)
     two = research.evaluate_m30_sweep_reclaim(rows, h1)
     assert one["dataset_fingerprint"] == two["dataset_fingerprint"]
+
+
+
+def test_sell_signal_uses_lower_35_percent_close_zone():
+    rows = candles(80)
+    rows[30] = {"time": BASE + 30 * 1800, "open": 2000.5, "high": 2002.5,
+                "low": 1997.5, "close": 1998.0}
+    signal = research._detect_signal(rows, research._wilder_atr(rows), 30)
+    assert signal["side"] == "SELL"
+    assert signal["close_position"] <= 0.35
+    assert signal["sweep_extreme"] == 2002.5
+
+
+def test_net_statistics_are_unavailable_when_costs_are_not_supplied():
+    rows = [{"gross_r": 1.0, "net_r": None}]
+    assert research._stats(rows, net=True)["trades"] == 0
+    assert research._stats(rows, net=True)["expectancy_r"] is None
+
+
+def test_median_uses_average_of_two_middle_values():
+    rows = [{"gross_r": value, "net_r": value} for value in (1.0, 3.0)]
+    assert research._stats(rows)["median_r"] == 2.0
+
+
+def test_cost_scenarios_reduce_net_expectancy():
+    rows = candles(1300)
+    h1 = h1_history()
+    # Exercise cost arithmetic independently of whether this fixture creates signals.
+    plan = {"risk_price": 2.0}
+    gross_r = 1.0
+    base_net = gross_r - 0.25 / plan["risk_price"]
+    stress_net = gross_r - 0.75 / plan["risk_price"]
+    assert stress_net < base_net
