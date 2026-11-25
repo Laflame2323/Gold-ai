@@ -28,8 +28,8 @@ class TradePlan:
     prior_range_low: float
     body_ratio: float
     close_position: float
-    h1_context: dict[str, Any]
-    assumptions: dict[str, Any]
+    h1_context: tuple[tuple[str, Any], ...]
+    assumptions: tuple[tuple[str, Any], ...]
 
 def _number(value: Any, name: str, *, positive: bool = False) -> float:
     if isinstance(value, bool):
@@ -98,12 +98,12 @@ def _h1_context(decision_close_time: int, h1: list[dict]) -> dict[str, Any] | No
     if len(completed) < 50: return None
     closes = [r["close"] for r in completed]
     e20, e50 = _ema_series(closes, 20), _ema_series(closes, 50)
-    slope = e20[-1] - e20[-6] if len(completed) >= 55 else None
+    slope = e20[-1] - e20[-2]
     return {
         "last_completed_h1_open": completed[-1]["time"], "completed_h1_bars": len(completed),
         "ema20": e20[-1], "ema50": e50[-1], "ema20_slope_5_h1_bars": slope,
         "ema_order": "bullish" if e20[-1] > e50[-1] else "bearish" if e20[-1] < e50[-1] else "flat",
-        "slope_definition": "current completed-H1 EMA20 minus EMA20 five completed H1 bars earlier",
+        "slope_definition": "current completed-H1 EMA20 minus previous completed-H1 EMA20",
     }
 
 def _detect_signal(rows: list[dict], atrs: list[float | None], index: int) -> dict | None:
@@ -156,8 +156,11 @@ def _simulate_segment(m30, h1, atrs, start, end, fingerprint, candidate_version,
              "stop_buffer_atr": .10, "stop_distance_atr_min": .50, "stop_distance_atr_max": 2.00,
              "target_r": 1.5, "max_holding_bars_including_entry_bar": 12,
              "same_bar_stop_target": "stop first", "opening_gap": "fill at open if crossed",
-             "h1_slope": "EMA20 now minus EMA20 five completed H1 bars earlier"})
-        pd = asdict(plan); plans.append(pd)
+             "h1_slope": "EMA20 now minus previous completed-H1 EMA20"} .items())
+        pd = asdict(plan)
+        pd["h1_context"] = dict(plan.h1_context)
+        pd["assumptions"] = dict(plan.assumptions)
+        plans.append(pd)
         last_allowed = min(entry_i + MAX_HOLDING_BARS - 1, end - 1)
         exit_price = exit_i = None
         reason = None
