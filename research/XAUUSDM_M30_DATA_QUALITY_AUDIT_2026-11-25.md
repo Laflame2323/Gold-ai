@@ -66,3 +66,24 @@ These patterns are consistent with holiday/early-close sessions, but this must b
 ## Reproducibility
 
 The figures above were obtained using read-only SQL against `public.market_candles`, filtering exactly on symbol `XAUUSDm`, timeframe `M30`, and source `MT5:Exness-MT5Trial9`. Gap counts use `lag(candle_time)` ordered by candle time and classify a gap as weekend-crossing if its UTC date interval includes Saturday or Sunday.
+
+
+## Additional tick-data route discovered
+
+Exness publishes a public Tick History page that allows an instrument and date period to be selected and a ZIP of historical bid/ask ticks to be downloaded. The page explicitly documents the `m` suffix as the Standard-account naming convention and gives `XAUUSDm` as an example. It also says the history is indicative/informational rather than proof of a particular account's execution.
+
+This creates a possible alternative or supplement to waiting for desktop MT5 tick collection:
+
+1. Trial a single representative day for `XAUUSDm` through the official Exness Tick History page.
+2. Confirm that the selected instrument is actually available and that the downloaded archive contains bid, ask, and millisecond timestamps.
+3. Preserve the original ZIP unchanged; record download date, selected symbol, date, file size, row count, and SHA-256.
+4. Validate monotonic timestamps, bid/ask positivity, ask >= bid, duplicate ticks, missing/empty intervals, and timezone interpretation.
+5. Compare a same-day tick-derived M1/M30 candle series with the existing Exness MT5 archive. Do not merge sources until their price/time alignment is understood.
+6. If accepted, ingest the data into a separate research source label (for example, `ExnessPublicTickHistory`) and keep it distinct from the MT5 trial collector.
+7. Use it for indicative historical bid/ask replay and spread distributions only after validation. It does not establish the exact fills or slippage of the user's MT5 trial account.
+
+Official references:
+- Exness Tick History: https://www.exness.com/tick-history/
+- Exness XAUUSD trading hours: https://www.exness.com/commodities/xauusd/
+
+The Exness page states that Tick History provides past bid and ask prices in a downloadable ZIP, identifies the `m` suffix with Standard accounts, and cautions that the archive is indicative/informational. The public XAUUSD product page describes standard gold trading as 24/5. Neither page alone supplies a complete historical XAUUSDm holiday/session calendar, so the session-gap classification remains open.
