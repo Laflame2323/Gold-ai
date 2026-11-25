@@ -69,6 +69,8 @@ def audit_candles(candles: list[dict], *, timeframe_seconds: int,
             errors.append({"index": i, "reason": "invalid_unix_timestamp"})
             continue
 
+        if ts % timeframe_seconds != 0:
+            errors.append({"index": i, "time": ts, "reason": "timestamp_off_timeframe_grid"})
         if ts in seen:
             errors.append({"index": i, "time": ts, "reason": "duplicate_timestamp"})
         if previous_ts is not None and ts < previous_ts:
