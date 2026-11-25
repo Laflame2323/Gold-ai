@@ -233,7 +233,8 @@ def _stats(rows, net=False):
     vals = [r["net_r" if net else "gross_r"] for r in rows if r["net_r" if net else "gross_r"] is not None]
     if not vals:
         return {"trades": 0, "win_rate_pct": None, "expectancy_r": None, "median_r": None,
-                "profit_factor": None, "max_drawdown_r": 0.0}
+                "profit_factor": None, "max_drawdown_r": 0.0, "longest_losing_streak": 0,
+                "holding_bars_mean": None, "holding_bars_median": None}
     wins, losses = [v for v in vals if v > 0], [v for v in vals if v < 0]
     gp, gl = sum(wins), abs(sum(losses))
     eq = peak = dd = 0.0
