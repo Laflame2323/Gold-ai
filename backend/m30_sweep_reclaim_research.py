@@ -187,7 +187,7 @@ def _simulate_segment(m30, h1, atrs, start, end, fingerprint, candidate_version,
     return {"plans": plans, "outcomes": outcomes, "rejected": rejected}
 
 def _stats(rows, net=False):
-    vals = [r["net_r" if net else "gross_r"] for r in rows]
+    vals = [r["net_r" if net else "gross_r"] for r in rows if r["net_r" if net else "gross_r"] is not None]
     if not vals:
         return {"trades": 0, "win_rate_pct": None, "expectancy_r": None, "median_r": None,
                 "profit_factor": None, "max_drawdown_r": 0.0}
