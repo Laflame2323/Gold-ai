@@ -26,3 +26,17 @@ This is a forward ledger. Historical work is recorded only at the candidate-fami
 At least three distinct historical candidate families have already been screened (EXP-001 through EXP-003). Their full parameter-search histories are not reconstructed, so the total number of variants tried is **unknown**. The M30 sweep-and-reclaim specification is the fourth registered candidate family and has not yet been performance-tested. Results from previously inspected samples must be treated as exploratory, not as a clean independent confirmation.
 
 The final M30 test remains sealed until data quality, session costs, candidate freeze, and the historical experiment count are documented.
+
+
+## Data-audit update — 2026-11-25
+
+A read-only structural audit of the existing Exness `XAUUSDm` M30 archive has been documented in `research/XAUUSDM_M30_DATA_QUALITY_AUDIT_2026-11-25.md`.
+
+- 50,035 M30 rows; all marked closed and verified.
+- No duplicate timestamp excess, invalid OHLC geometry, or off-grid M30 timestamps were found.
+- 1,094 intervals exceed 30 minutes; 873 do not cross a weekend date, and 221 do.
+- Thirty-three non-weekend-crossing intervals exceed 90 minutes; the largest is 29 hours.
+- These are interval observations, not a count of confirmed missing data. A broker holiday/session calendar is still required.
+- No full canonical payload SHA-256 fingerprint has yet been computed from the frozen M30+H1 export.
+
+EXP-004 therefore remains **not formally evaluated**. Do not open the final test based on this preliminary structural audit alone.
