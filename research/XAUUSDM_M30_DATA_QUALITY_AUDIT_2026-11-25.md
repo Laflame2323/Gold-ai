@@ -106,3 +106,17 @@ Therefore, the earlier 1,092 figure is **not a missing-H1-context count** and mu
 The evaluator currently uses the latest completed H1 row without a maximum-age check. Before formal replay, define and freeze a point-in-time freshness/session rule. Do not forward-fill H1 prices or treat a stale context as fresh. Candidate options to test *without looking at strategy outcomes* include (a) fail closed when H1 age exceeds a conservative fixed threshold, and (b) fail closed when the elapsed time exceeds a threshold that is explicitly session-calendar-aware. The latter cannot be implemented responsibly until the historical Exness session/holiday calendar is sourced and validated.
 
 No production code or Supabase data/schema was changed by this follow-up audit.
+
+
+## Exness session-calendar source review (2026-11-25)
+
+The official Exness Help Center's instrument-hours article confirms that:
+- Its custom schedule can be filtered by specific instrument, date range, and timezone, and is intended to include known holidays, maintenance, and DST changes.
+- Exness trading servers use UTC+0.
+- Rollover usually occurs at 21:00 UTC in summer and 22:00 UTC in winter, typically lasting 1–2 hours; gold is usually closed during forex rollover.
+- Cent and Trial servers may have brief daily maintenance around 23:20 UTC on weekdays and Saturdays.
+- Holiday schedules can shorten or suspend trading.
+
+This official information makes a session-aware policy necessary and explains why simple UTC weekday/weekend classification is insufficient. It does **not** yet constitute a complete historical XAUUSDm session calendar for the full 2022–2026 archive. The instrument-specific custom schedule still needs to be generated/exported for the archive's date range, and historical holiday/maintenance exceptions must be captured before classifying every gap.
+
+Source: Exness Help Center, "Instrument trading hours" (updated 2026-07-21), https://get.exness.help/hc/en-us/articles/4405235684498-Instrument-trading-hours
