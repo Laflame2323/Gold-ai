@@ -229,11 +229,13 @@ def evaluate_m30_sweep_reclaim(
     m30 = _validate_candles(m30_candles, "m30_candles")
     if h1_candles is None: raise ValueError("H1 candles are required by preregistration; missing context fails closed")
     h1 = _validate_candles(h1_candles, "h1_candles")
-    fingerprint = dataset_fingerprint or _fingerprint(m30, h1)
+    candle_payload_sha256 = _fingerprint(m30, h1)
+    fingerprint = dataset_fingerprint or candle_payload_sha256
     if not isinstance(fingerprint, str) or not fingerprint.strip(): raise ValueError("dataset_fingerprint must be non-empty")
     if len(m30) < 100 or len(h1) < 55:
         return {"status": "insufficient_data", "m30_count": len(m30), "h1_count": len(h1),
-                "dataset_fingerprint": fingerprint, "execution_enabled": False}
+                "dataset_fingerprint": fingerprint, "candle_payload_sha256": candle_payload_sha256,
+                "execution_enabled": False}
     atrs, n = _wilder_atr(m30), len(m30)
     first, second = int(n * .60), int(n * .80)
     splits = {"development": (0, max(0, first - EMBARGO_BARS)),
@@ -261,6 +263,7 @@ def evaluate_m30_sweep_reclaim(
                     "combined": _stats(adjusted, True)}
         periods[name] = period
     return {"status": "complete", "candidate_version": candidate_version, "dataset_fingerprint": fingerprint,
+            "candle_payload_sha256": candle_payload_sha256,
             "evaluation_mode": evaluation_mode, "split_indices_half_open": splits, "embargo_bars_each_side": EMBARGO_BARS,
             "periods": periods, "final_test": "SEALED_NOT_RUN" if "final_test" not in periods else periods["final_test"],
             "cost_model": {"round_trip_cost_price_units": round_trip_cost_price_units,
