@@ -87,7 +87,8 @@ def build_directional_labels(
     """
     if timeframe not in TIMEFRAME_SECONDS:
         raise ValueError("timeframe must be H1 or M15")
-    if isinstance(horizon_bars, bool) or horizon_bars not in HORIZON_BARS[timeframe]:
+    if (isinstance(horizon_bars, bool) or not isinstance(horizon_bars, int)
+            or horizon_bars not in HORIZON_BARS[timeframe]):
         raise ValueError(f"unsupported {timeframe} horizon; allowed: {HORIZON_BARS[timeframe]}")
     if isinstance(atr_period, bool) or not isinstance(atr_period, int) or atr_period < 2:
         raise ValueError("atr_period must be an integer >= 2")
@@ -99,7 +100,8 @@ def build_directional_labels(
     interval = TIMEFRAME_SECONDS[timeframe]
     atr_values = _wilder_atr(data, atr_period)
     events = []
-    excluded = {"warmup": 0, "missing_or_session_gap": 0, "invalid_atr": 0}
+    excluded = {"warmup": min(len(data), atr_period - 1),
+                "missing_or_session_gap": 0, "invalid_atr": 0}
     ambiguous = timeouts = 0
 
     for decision_index in range(atr_period - 1, len(data) - horizon_bars):
