@@ -1,0 +1,155 @@
+{
+  "created_at": "2026-11-26",
+  "status": "trained_research_candidate",
+  "model_family": "logistic_regression",
+  "symbol": "XAUUSD",
+  "training_source": "Exness MT5 archive XAUUSDm; overlap check against XAUUSD feed completed",
+  "timeframe": "M15",
+  "horizon_bars": 4,
+  "horizon_minutes": 60,
+  "feature_names": [
+    "return_1",
+    "return_3",
+    "return_5",
+    "return_10",
+    "ema_gap_10",
+    "ema_gap_30",
+    "rsi_14",
+    "range_pct",
+    "body_pct",
+    "volatility_10"
+  ],
+  "data": {
+    "archive_candles": 12000,
+    "archive_first_utc": "2026-05-20T13:00:00.000Z",
+    "archive_last_utc": "2026-11-19T13:45:00.000Z",
+    "eligible_label_rows": 11444,
+    "train_samples": 8000,
+    "validation_samples": 1712,
+    "untouched_test_samples": 1716,
+    "latest_feed_candles": 304,
+    "latest_feed_first_utc": "2026-11-23T00:00:00.000Z",
+    "latest_feed_last_utc": "2026-11-26T06:45:00.000Z",
+    "live_forward_samples": 258
+  },
+  "metrics": {
+    "train": {
+      "samples": 8000,
+      "accuracy_pct": 53.13,
+      "balanced_accuracy_pct": 51.81,
+      "brier_score": 0.248758,
+      "up_precision_pct": 53.15,
+      "down_precision_pct": 53.12,
+      "class_counts": {
+        "up": 3838,
+        "down": 4162
+      },
+      "coverage_55": {
+        "samples": 837,
+        "accuracy_pct": 58.3
+      }
+    },
+    "validation": {
+      "samples": 1712,
+      "accuracy_pct": 51.23,
+      "balanced_accuracy_pct": 50.03,
+      "brier_score": 0.249593,
+      "up_precision_pct": 48.54,
+      "down_precision_pct": 51.59,
+      "class_counts": {
+        "up": 829,
+        "down": 883
+      },
+      "coverage_55": {
+        "samples": 138,
+        "accuracy_pct": 61.59
+      }
+    },
+    "untouched_test": {
+      "samples": 1716,
+      "accuracy_pct": 53.44,
+      "balanced_accuracy_pct": 50.31,
+      "brier_score": 0.248647,
+      "up_precision_pct": 45.38,
+      "down_precision_pct": 55.56,
+      "class_counts": {
+        "up": 766,
+        "down": 950
+      },
+      "coverage_55": {
+        "samples": 151,
+        "accuracy_pct": 54.3
+      }
+    },
+    "latest_exness_forward_test": {
+      "samples": 258,
+      "accuracy_pct": 50,
+      "balanced_accuracy_pct": 49.45,
+      "brier_score": 0.249164,
+      "up_precision_pct": 43.59,
+      "down_precision_pct": 55.32,
+      "class_counts": {
+        "up": 114,
+        "down": 144
+      },
+      "coverage_55": {
+        "samples": 30,
+        "accuracy_pct": 53.33
+      }
+    }
+  },
+  "scaler": {
+    "mean": [
+      -0.000004068544913785569,
+      -0.00000894052314188308,
+      -0.000014885892482394692,
+      -0.000016687478983965956,
+      -0.00001786314535706482,
+      -0.00007239148749010128,
+      -0.006580862905559767,
+      0.0021228605159680216,
+      -0.00001238570187662901,
+      0.001334140454312337
+    ],
+    "scale": [
+      0.001558481069934491,
+      0.0026678167557346428,
+      0.0034223143578624975,
+      0.004840703934731786,
+      0.0021915138322952093,
+      0.004051875899343748,
+      0.24504384957594508,
+      0.00136670210758124,
+      0.0015313193479637361,
+      0.0007657342604123349
+    ]
+  },
+  "coefficients": [
+    -0.08114016925640725,
+    -0.02938815867238271,
+    -0.016098033551794698,
+    0.08595513535790876,
+    -0.0012585219943990365,
+    0.00911360501758798,
+    -0.08677582392562917,
+    -0.02797156823026575,
+    0.03539695065435607,
+    0.014350830828201107,
+    0.03988038187314977
+  ],
+  "fit": {
+    "epochs": 1200,
+    "learning_rate": 0.04,
+    "l2": 0.01
+  },
+  "research_only": true,
+  "production_deployed": false,
+  "execution_enabled": false,
+  "limitations": [
+    "This is an M15-only baseline; higher-timeframe confirmation is not included yet.",
+    "Labels are direction from next candle open to the close four M15 bars later; stop/target path is not modelled.",
+    "The archive stores one OHLC price series; spread, commission and slippage are not deducted.",
+    "The latest Exness feed returned through 2026-11-26 06:45 UTC, not a continuous real-time stream.",
+    "Latest-feed forward test is only 270 samples and is not enough to establish profitability."
+  ]
+}
