@@ -9,12 +9,13 @@ import base64
 import hashlib
 import json
 import logging
-import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+
+import joblib
 
 from market_storage import (
     MarketStorageError,
@@ -87,6 +88,12 @@ def run_training() -> dict:
             artifact_b64 = None
             artifact_sha = None
         else:
+            # Replace the evaluator's generic source label with the actual feed.
+            artifact = joblib.load(artifact_path)
+            artifact["training_source"] = source
+            artifact["training_symbol"] = symbol
+            artifact["training_feed"] = "authenticated_mt5_read_only"
+            joblib.dump(artifact, artifact_path, compress=3)
             status = "complete"
             artifact_bytes = artifact_path.read_bytes()
             artifact_b64 = base64.b64encode(artifact_bytes).decode("ascii")
