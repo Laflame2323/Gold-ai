@@ -2,7 +2,7 @@ name: Backend tests
 
 on:
   push:
-    branches: [main, research/net-expectancy-engine]
+    branches: [main, research/net-expectancy-engine, research/day-trader-workflow-adaptation]
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
@@ -26,3 +26,6 @@ jobs:
       - name: Run backend unit tests
         working-directory: backend
         run: python -m unittest discover -s . -p "test_*.py" -v
+      - name: Run nested pytest research tests
+        working-directory: backend
+        run: python -m pytest -v tests/test_d1_buy_candidate.py tests/test_point_in_time_features.py tests/test_profitability_research.py tests/test_m30_sweep_reclaim_research.py tests/test_market_data_quality.py tests/test_multi_horizon_labels.py tests/test_regime_features.py

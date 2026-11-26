@@ -194,6 +194,105 @@ def get_mt5_market_candles(symbol, source, timeframe, now=None, max_candles=5000
         "warning": "Broker candles are read-only research data. Execution readiness is evaluated separately.",
     }
 
+
+def get_mt5_tick_history(symbol, source, start_time, end_time, max_ticks=50000):
+    """Read a bounded, broker-specific bid/ask tick window for research replay."""
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise MarketStorageError("A valid broker symbol is required.")
+    if not isinstance(source, str) or not source.startswith("MT5:"):
+        raise MarketStorageError("A verified MT5 source is required.")
+    if isinstance(start_time, bool) or not isinstance(start_time, int) or start_time <= 0:
+        raise MarketStorageError("start_time must be a positive Unix timestamp in seconds.")
+    if isinstance(end_time, bool) or not isinstance(end_time, int) or end_time <= start_time:
+        raise MarketStorageError("end_time must be later than start_time.")
+    if isinstance(max_ticks, bool) or not isinstance(max_ticks, int) or not 100 <= max_ticks <= 50000:
+        raise MarketStorageError("max_ticks must be an integer between 100 and 50,000.")
+
+    base_url, api_key = _supabase_credentials()
+    if not base_url or not api_key:
+        raise MarketStorageError("Supabase private credentials are not configured.")
+    start_msc, end_msc = start_time * 1000, end_time * 1000
+    params = {
+        "select": "id,symbol,source,tick_time_msc,bid,ask,last,flags",
+        "symbol": f"eq.{symbol}",
+        "source": f"eq.{source}",
+        "tick_time_msc": f"gte.{start_msc}",
+        "and": f"(tick_time_msc.lt.{end_msc})",
+        "order": "tick_time_msc.asc,id.asc",
+        "limit": "1000",
+    }
+    headers = {
+        "apikey": api_key,
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+        "Connection": "close",
+    }
+    rows = []
+    fetch_limit = max_ticks + 1
+    for offset in range(0, fetch_limit, 1000):
+        page_limit = min(1000, fetch_limit - offset)
+        query = urlencode({**params, "limit": str(page_limit), "offset": str(offset)})
+        last_error = "unknown read error"
+        page = None
+        for attempt in range(5):
+            try:
+                request = Request(f"{base_url}/rest/v1/mt5_ticks_research?{query}", headers=headers)
+                with urlopen(request, timeout=30) as response:
+                    page = json.loads(response.read().decode("utf-8"))
+                if not isinstance(page, list):
+                    raise ValueError("Supabase returned a non-list tick response.")
+                break
+            except HTTPError as exc:
+                last_error = f"Supabase HTTP {exc.code}"
+                if exc.code not in (429, 500, 502, 503, 504):
+                    break
+            except (URLError, TimeoutError, OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+                last_error = type(exc).__name__
+            if attempt < 4:
+                time.sleep(min(0.75 * (2 ** attempt), 6.0))
+        if page is None:
+            raise MarketStorageError(
+                f"Could not read the private MT5 tick archive ({last_error})."
+            )
+        rows.extend(page)
+        if len(page) < 1000:
+            break
+
+    ticks = []
+    for row in rows:
+        try:
+            stamp = int(row["tick_time_msc"])
+            bid, ask = float(row["bid"]), float(row["ask"])
+            if stamp < start_msc or stamp >= end_msc:
+                continue
+            if not (math.isfinite(bid) and math.isfinite(ask) and 0 < bid <= ask):
+                continue
+            ticks.append({
+                "time_msc": stamp,
+                "bid": bid,
+                "ask": ask,
+                "id": int(row["id"]),
+            })
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+
+    ticks.sort(key=lambda item: (item["time_msc"], item["id"]))
+    truncated = len(ticks) > max_ticks
+    ticks = ticks[:max_ticks]
+    return {
+        "symbol": symbol,
+        "source": source,
+        "count": len(ticks),
+        "ticks": ticks,
+        "start_time": start_time,
+        "end_time": end_time,
+        "max_ticks": max_ticks,
+        "truncated": truncated,
+        "data_status": "available" if ticks else "empty",
+        "read_only": True,
+        "research_only": True,
+    }
+
 # Avoid repeatedly upserting an unchanged closed-candle window on dashboard polls.
 # Update the signature only after Supabase confirms a successful write.
 _candle_archive_cache = {}

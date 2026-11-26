@@ -1,0 +1,216 @@
+{
+  "created_at": "2026-11-26",
+  "status": "trained_research_candidate",
+  "model_family": "logistic_regression_multitimeframe",
+  "symbol": "XAUUSD",
+  "source": "Exness MT5 broker data",
+  "base_timeframe": "M15",
+  "confirmation_timeframes": [
+    "H1",
+    "M30"
+  ],
+  "horizon_bars": 4,
+  "horizon_minutes": 60,
+  "feature_names": [
+    "H1_return_1",
+    "H1_return_3",
+    "H1_return_5",
+    "H1_ema_gap_10",
+    "H1_ema_gap_30",
+    "H1_rsi_14",
+    "H1_range_pct",
+    "H1_body_pct",
+    "H1_volatility_10",
+    "M30_return_1",
+    "M30_return_3",
+    "M30_return_5",
+    "M30_ema_gap_10",
+    "M30_ema_gap_30",
+    "M30_rsi_14",
+    "M30_range_pct",
+    "M30_body_pct",
+    "M30_volatility_10",
+    "M15_return_1",
+    "M15_return_3",
+    "M15_return_5",
+    "M15_ema_gap_10",
+    "M15_ema_gap_30",
+    "M15_rsi_14",
+    "M15_range_pct",
+    "M15_body_pct",
+    "M15_volatility_10"
+  ],
+  "data": {
+    "historical": {
+      "M15": 12000,
+      "M30": 6000,
+      "H1": 3000,
+      "eligible_samples": 10966,
+      "train": 7639,
+      "validation": 1652,
+      "untouched_test": 1659
+    },
+    "forward_test": {
+      "M15": 304,
+      "M30": 152,
+      "H1": 76,
+      "eligible_samples": 163,
+      "first_utc": "2026-11-23T00:00:00.000Z",
+      "last_utc": "2026-11-26T06:45:00.000Z"
+    }
+  },
+  "metrics": {
+    "train": {
+      "samples": 7639,
+      "accuracy_pct": 53.67,
+      "balanced_accuracy_pct": 52.42,
+      "brier_score": 0.248221,
+      "up_precision_pct": 54.3,
+      "down_precision_pct": 53.53,
+      "class_counts": {
+        "up": 3664,
+        "down": 3975
+      }
+    },
+    "validation": {
+      "samples": 1652,
+      "accuracy_pct": 51.15,
+      "balanced_accuracy_pct": 50.04,
+      "brier_score": 0.249341,
+      "up_precision_pct": 48.56,
+      "down_precision_pct": 51.6,
+      "class_counts": {
+        "up": 800,
+        "down": 852
+      }
+    },
+    "untouched_test": {
+      "samples": 1659,
+      "accuracy_pct": 53.47,
+      "balanced_accuracy_pct": 49.9,
+      "brier_score": 0.247825,
+      "up_precision_pct": 43.81,
+      "down_precision_pct": 55.87,
+      "class_counts": {
+        "up": 731,
+        "down": 928
+      }
+    },
+    "latest_exness_forward_test": {
+      "samples": 163,
+      "accuracy_pct": 46.63,
+      "balanced_accuracy_pct": 46.7,
+      "brier_score": 0.25257,
+      "up_precision_pct": 44.05,
+      "down_precision_pct": 49.37,
+      "class_counts": {
+        "up": 77,
+        "down": 86
+      }
+    }
+  },
+  "scaler": {
+    "mean": [
+      -0.00000695796765213755,
+      0.000009636120635154387,
+      -0.00002596084087142247,
+      -0.00008553369464014393,
+      -0.0003662592921932104,
+      -0.012715534273966067,
+      0.004375647105415187,
+      -0.0000399481481949607,
+      0.0027887234970260925,
+      -0.00001508800127659455,
+      -0.000016387037880221977,
+      -0.0000037538155849660154,
+      -0.00003431626491874571,
+      -0.00016470637982823536,
+      -0.013510702305798511,
+      0.003049745894486547,
+      -0.000020373949450896098,
+      0.0019223648494321702,
+      -0.000009192282525922927,
+      -0.000025155275803027784,
+      -0.000027447381844559623,
+      -0.00002267552677479485,
+      -0.0000700615985531377,
+      -0.006297490246699918,
+      0.0021440695004627743,
+      -0.000012021527028769702,
+      0.001344408384678491
+    ],
+    "scale": [
+      0.003151157278047862,
+      0.005319670755677536,
+      0.006903834251426509,
+      0.00439039457583542,
+      0.008297153678302747,
+      0.25549037516215956,
+      0.00263125955944361,
+      0.0030978597415860045,
+      0.0012478074513466834,
+      0.002151814168714437,
+      0.0037659983500563854,
+      0.004851980089344271,
+      0.003087818107605685,
+      0.005771615455215517,
+      0.2550390983269896,
+      0.0019057156529135744,
+      0.0021524842854022865,
+      0.0009453797192550228,
+      0.001547118499707195,
+      0.0026593503059042607,
+      0.0034372050307979155,
+      0.002197935989069671,
+      0.004066097492330376,
+      0.2458953788813793,
+      0.0013751565887583305,
+      0.0015472675845487934,
+      0.0007627126509108572
+    ]
+  },
+  "coefficients": [
+    -0.08145659320049826,
+    -0.005545112439709089,
+    0.018462596585416907,
+    -0.10116241935848272,
+    -0.037138011134245905,
+    0.009903976221622637,
+    -0.01230490114889631,
+    -0.012715338106185404,
+    -0.025839006847034884,
+    -0.015102726475690383,
+    -0.007817318316338823,
+    0.047113118832718806,
+    -0.002274268368774832,
+    -0.010515064999709896,
+    0.02133843169289868,
+    0.0237740217671311,
+    0.047764777985002685,
+    -0.007922816991484153,
+    -0.008940567151685976,
+    -0.014381762544580767,
+    -0.023862099669672353,
+    0.05399597415211721,
+    0.006602739841797315,
+    -0.01456357952396908,
+    0.0016054997866752265,
+    0.017149256680718296,
+    -0.009834971932195515,
+    0.04217551294436093
+  ],
+  "fit": {
+    "epochs": 600,
+    "learning_rate": 0.04,
+    "l2": 0.02
+  },
+  "research_only": true,
+  "production_deployed": false,
+  "execution_enabled": false,
+  "limitations": [
+    "M15 entries with H1 and M30 confirmation; H4 omitted because Exness returned rate-limit errors for H4.",
+    "Latest feed ends at 2026-11-26 06:45 UTC; it is not a continuous live stream.",
+    "Directional one-hour labels; spread, commission, slippage and stop/target path are not modelled.",
+    "Forward test is small and does not prove profitability."
+  ]
+}
