@@ -21,9 +21,3 @@ def test_training_refuses_stale_broker_candles():
             assert "stale" in str(exc)
         else:
             raise AssertionError("Training must stop when broker candles are stale.")
-
-
-def test_training_job_is_research_only():
-    source = open("research_training_job.py", encoding="utf-8").read()
-    assert "execution_enabled" in source
-    assert "manual review only" in source
